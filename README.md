@@ -400,6 +400,12 @@ By default it starts `/home/app/oi/mediad`. Pass `-media ""` to run it without v
 
 ## mediad
 
+> **Note on OpenIPC:** OpenIPC provides only the cross-compilation toolchain and
+> the HiSilicon vendor library blobs used to build `mediad`.  The firmware image
+> itself is based on the original Metzler firmware — the build process unpacks
+> that image, replaces the `dec` binary, and repacks it.  Nothing from the OpenIPC
+> firmware runs on the device.
+
 `mediad` needs a toolchain and vendor libraries that are not part of this repository. The build scripts expect them under `~/oi-tc` on a Linux machine.
 
 ### Toolchain
