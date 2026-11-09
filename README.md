@@ -1,3 +1,5 @@
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/jacob3141)
+
 # open-metzler-vdm10
 
 Local software for the Metzler VDM10-VM-POE video door station. It needs no cloud service.
