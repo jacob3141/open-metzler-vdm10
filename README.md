@@ -44,4 +44,4 @@ The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.
 
 ## License
 
-AGPL-3.0-or-later, see [LICENSE](LICENSE).
+AGPL-3.0-or-later, see [LICENSE](LICENSE). This does not apply to `firmware/`, which contains the unmodified vendor firmware and remains the property of its owner.
