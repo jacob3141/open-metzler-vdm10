@@ -221,7 +221,9 @@ U-Boot downloads and writes the image.  When it finishes, the device reboots.
 
 The device boots into the replacement firmware:
 
-- Cloud processes (`hicore`, `gpl_process`, `sipServer`) are **not started**.
+- `hicore` (the vendor application: cloud, RTSP, SIP, web UI) is **removed from
+  the firmware** — its tarball is replaced by the `doorbelld`/`mediad` bundle.
+  `gpl_process` (Yate) is not started; `sipServer` is killed at startup.
 - All hardware drivers are loaded (camera, codec, audio, LED, IR, RTC, watchdog).
 - `udhcpc` runs with hostname `tuerstation`.  If no lease arrives it keeps the
   kernel IP `192.0.0.64` as a fallback; if a lease expires the last address stays
@@ -403,8 +405,8 @@ By default it starts `/home/app/oi/mediad`. Pass `-media ""` to run it without v
 > **Note on OpenIPC:** OpenIPC provides only the cross-compilation toolchain and
 > the HiSilicon vendor library blobs used to build `mediad`.  The firmware image
 > itself is based on the original Metzler firmware — the build process unpacks
-> that image, replaces the `dec` binary, and repacks it.  Nothing from the OpenIPC
-> firmware runs on the device.
+> that image, replaces the `dec` binary and the `hicore` application bundle, and
+> repacks it.  Nothing from the OpenIPC firmware runs on the device.
 
 `mediad` needs a toolchain and vendor libraries that are not part of this repository. The build scripts expect them under `~/oi-tc` on a Linux machine.
 
