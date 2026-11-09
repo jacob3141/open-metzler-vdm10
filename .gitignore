@@ -1,0 +1,14 @@
+.env
+data/
+*.h264
+*.mp4
+*.img
+*.dav
+*.tgz
+*.tar
+/device/doorbelld/doorbelld
+/device/mediad/mediad
+/device/mediad/atest
+/device/mediad/i2cprobe
+/hub/doorbell-hub
+/hub/stubclient

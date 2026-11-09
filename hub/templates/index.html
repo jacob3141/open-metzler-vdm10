@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Door station</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f5f4f0; --panel: #fff; --fg: #1d1c19; --muted: #6c6a62; --line: #dcdad2; --accent: #1f6f5c; --bad: #b3361f; --code: #eeece5; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151513; --panel: #1f1e1b; --fg: #eeece6; --muted: #a09d94; --line: #35332e; --accent: #5cc4a8; --bad: #f08a72; --code: #2a2925; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-top: 14px; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--accent); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  form.inline { display: inline; margin: 0; }
+  form.add { display: flex; gap: 8px; flex-wrap: wrap; }
+  input[type=text] { flex: 1 1 200px; padding: 8px 10px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  button { padding: 8px 14px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #10231d; } }
+  code { display: block; padding: 10px; margin-top: 8px; background: var(--code); border-radius: 6px; word-break: break-all; font-size: 13px; }
+  video { display: block; width: 100%; margin-top: 8px; border-radius: 6px; background: #000; }
+  .status { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Door station</h1>
+  <div class="status">
+    <span>Doorbell: {{if .Status.Connected}}<span class="ok">connected</span>{{else}}<span class="bad">not connected</span>{{end}}</span>
+    <span class="muted">Last ring: {{when .Status.LastRing}}</span>
+    {{if .Status.Ringing}}<span class="ok">Ringing now</span>{{end}}
+    {{if .Status.Recording}}<span class="ok">Recording</span>{{end}}
+  </div>
+
+  {{if .NewToken}}
+  <section>
+    <h2>Client "{{.NewName}}" created</h2>
+    <div class="muted">This token is shown only once. Enter it in the app.</div>
+    <code>{{.NewToken}}</code>
+  </section>
+  {{end}}
+
+  <section>
+    <h2>Clients</h2>
+    {{range .Clients}}
+    <div class="row">
+      <div>
+        <strong>{{.Name}}</strong>
+        {{if index $.Status.Sessions .ID}}<span class="ok">online</span>{{end}}
+        <div class="muted">Last seen: {{when .LastSeen}}</div>
+      </div>
+      <form class="inline" method="post" action="/admin/clients/{{.ID}}/delete"><button type="submit">Remove</button></form>
+    </div>
+    {{else}}
+    <p class="muted">No clients registered yet.</p>
+    {{end}}
+    <form class="add" method="post" action="/admin/clients">
+      <input type="text" name="name" placeholder="Device name, e.g. Phone" maxlength="64" required aria-label="Device name">
+      <button class="primary" type="submit">Register client</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Visitor messages</h2>
+    <p class="muted">If nobody answers within {{.Timeout}} seconds, the hub records {{.RecordFor}} seconds of video. There is no audio yet.</p>
+    {{range .Messages}}
+    <div class="row">
+      <div>{{when .Time}} <span class="muted">{{mb .Size}}</span></div>
+      <form class="inline" method="post" action="/admin/messages/{{.ID}}/delete"><button type="submit">Delete</button></form>
+      <video controls preload="metadata" src="/admin/messages/{{.ID}}"></video>
+    </div>
+    {{else}}
+    <p class="muted">No messages.</p>
+    {{end}}
+  </section>
+</main>
+</body>
+</html>

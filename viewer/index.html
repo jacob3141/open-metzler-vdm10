@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Door station</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f4f2; --fg: #1c1c1a; --muted: #6b6b66; --line: #d8d8d2; --accent: #b4410e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #141413; --fg: #ecece8; --muted: #9a9a93; --line: #33332f; --accent: #f0935f; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
+  canvas { display: block; width: 100%; height: auto; background: #000; border-radius: 6px; aspect-ratio: 16 / 9; }
+  #status { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #bell { margin-top: 10px; min-height: 1.5em; color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Door station</h1>
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div id="status"><span id="state">Connecting …</span><span id="fps"></span><span id="rate"></span></div>
+  <div id="bell" role="status" aria-live="polite"></div>
+</main>
+<script>
+const HOST = new URLSearchParams(location.search).get("host") || "doorbell.home.arpa";
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const stateEl = document.getElementById("state");
+const fpsEl = document.getElementById("fps");
+const rateEl = document.getElementById("rate");
+const bellEl = document.getElementById("bell");
+
+let decoder = null, ts = 0, waitKey = true, shown = 0, bytes = 0;
+
+function setState(s) { stateEl.textContent = s; }
+
+function nalType(d) {
+  for (let i = 0; i + 4 < d.length && i < 64; i++) {
+    if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 1) return { type: d[i + 3] & 0x1f, at: i + 3 };
+  }
+  return null;
+}
+
+function hasNal(d, wanted) {
+  for (let i = 0; i + 3 < d.length && i < 256; i++) {
+    if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 1 && wanted.includes(d[i + 3] & 0x1f)) return true;
+  }
+  return false;
+}
+
+function hex(b) { return b.toString(16).padStart(2, "0").toUpperCase(); }
+
+function newDecoder(sps) {
+  if (decoder && decoder.state !== "closed") decoder.close();
+  decoder = new VideoDecoder({
+    output(frame) {
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      frame.close();
+      shown++;
+    },
+    error(e) { setState("Decoder error: " + e.message); decoder = null; waitKey = true; },
+  });
+  decoder.configure({
+    codec: "avc1." + hex(sps[1]) + hex(sps[2]) + hex(sps[3]),
+    optimizeForLatency: true,
+  });
+}
+
+function onFrame(buf) {
+  const d = new Uint8Array(buf);
+  bytes += d.length;
+  const key = hasNal(d, [5, 7]);
+  if (waitKey && !key) return;
+  if (!decoder || decoder.state === "closed") {
+    const n = nalType(d);
+    if (!n || n.type !== 7) return;
+    newDecoder(d.subarray(n.at));
+  }
+  if (decoder.decodeQueueSize > 30) { waitKey = true; return; }
+  waitKey = false;
+  decoder.decode(new EncodedVideoChunk({ type: key ? "key" : "delta", timestamp: ts, data: d }));
+  ts += 33333;
+}
+
+function connectVideo() {
+  const ws = new WebSocket("ws://" + HOST + ":8080/video");
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => setState("Connected, waiting for a keyframe …");
+  ws.onmessage = (e) => { onFrame(e.data); if (shown > 0) setState("Live"); };
+  ws.onclose = () => { setState("Disconnected, reconnecting …"); waitKey = true; setTimeout(connectVideo, 2000); };
+}
+
+function connectRPC() {
+  const ws = new WebSocket("ws://" + HOST + ":8080/");
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.method === "button.pressed") {
+      bellEl.textContent = "Someone rang: " + new Date().toLocaleTimeString();
+    }
+  };
+  ws.onclose = () => setTimeout(connectRPC, 2000);
+}
+
+setInterval(() => {
+  fpsEl.textContent = shown + " fps";
+  rateEl.textContent = Math.round(bytes * 8 / 1000) + " kbit/s";
+  shown = 0; bytes = 0;
+}, 1000);
+
+if (!("VideoDecoder" in window)) {
+  setState("WebCodecs is not available here (open this page through localhost or HTTPS).");
+} else {
+  connectVideo();
+  connectRPC();
+}
+</script>
+</body>
+</html>

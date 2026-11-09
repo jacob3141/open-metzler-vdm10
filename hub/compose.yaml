@@ -1,0 +1,27 @@
+# Create .env from .env.example before starting.
+services:
+  doorbell-hub:
+    build: .
+    container_name: doorbell-hub
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?HUB_ADMIN_PASSWORD is missing}
+      HUB_DOORBELL: ${HUB_DOORBELL:?HUB_DOORBELL is missing}
+      HUB_RING_TIMEOUT: ${HUB_RING_TIMEOUT:-30}
+      HUB_RECORD_SECONDS: ${HUB_RECORD_SECONDS:-30}
+    volumes:
+      - hub-data:/data
+    networks:
+      lan:
+        ipv4_address: ${HUB_IP:?HUB_IP is missing}
+
+volumes:
+  hub-data:
+
+networks:
+  lan:
+    external: true
+    name: ${HUB_NETWORK:?HUB_NETWORK is missing}
