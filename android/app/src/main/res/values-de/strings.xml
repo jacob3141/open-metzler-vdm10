@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Türklingel</string>
+
+    <string name="ch_status">Verbindung</string>
+    <string name="ch_status_desc">Zeigt, dass die App mit dem Türklingel-Hub verbunden ist.</string>
+    <string name="ch_ring">Klingeln</string>
+    <string name="ch_ring_desc">Klingelt, wenn jemand an der Tür klingelt.</string>
+    <string name="ch_info">Verpasstes Klingeln und Nachrichten</string>
+    <string name="ch_info_desc">Verpasstes Klingeln und neue Besuchernachrichten.</string>
+
+    <string name="status_connecting">Verbinde mit dem Hub …</string>
+    <string name="status_connected">Bereit für die Türklingel</string>
+    <string name="status_no_wifi">Nicht im WLAN. Die Klingel erreicht dich nur zu Hause.</string>
+    <string name="status_unreachable">Der Hub ist nicht erreichbar</string>
+    <string name="status_not_paired">Der Hub kennt dieses Telefon nicht mehr</string>
+
+    <string name="ring_title">Es klingelt an der Tür</string>
+    <string name="ring_text">Klingeln um %1$s</string>
+    <string name="accept">Annehmen</string>
+    <string name="reject">Ablehnen</string>
+    <string name="hang_up">Schließen</string>
+    <string name="missed_title">Verpasstes Klingeln</string>
+    <string name="missed_text">Um %1$s hat jemand geklingelt.</string>
+    <string name="taken_title">Klingeln angenommen</string>
+    <string name="taken_text">Das Klingeln um %1$s hat %2$s angenommen.</string>
+    <string name="message_title">Neue Besuchernachricht</string>
+    <string name="message_text">Aufgenommen um %1$s</string>
+
+    <string name="call_ringing">Es klingelt an der Tür</string>
+    <string name="call_answering">Nehme an …</string>
+    <string name="call_answered">Angenommen. Ton gibt es noch nicht.</string>
+    <string name="call_taken">%1$s hat angenommen</string>
+    <string name="call_over">Das Klingeln ist vorbei</string>
+    <string name="call_connecting">Verbinde mit der Kamera …</string>
+    <string name="call_live">Live</string>
+
+    <string name="main_hub">%1$s · Hub %2$s</string>
+    <string name="main_live">Tür anzeigen</string>
+    <string name="main_note">Die App funktioniert nur im WLAN zu Hause. Nur Bild, Ton gibt es noch nicht.</string>
+    <string name="retry">Erneut versuchen</string>
+    <string name="pair_again">Neu verbinden</string>
+    <string name="allow">Erlauben</string>
+    <string name="perm_notify">Erlaube Benachrichtigungen, sonst hörst du die Klingel nicht.</string>
+    <string name="perm_fullscreen">Erlaube Vollbild-Benachrichtigungen, damit beim Klingeln die Tür auch auf dem Sperrbildschirm erscheint.</string>
+    <string name="perm_battery">Lass die App ohne Akku-Beschränkung im Hintergrund laufen, damit sie mit dem Hub verbunden bleibt.</string>
+    <string name="unpair">Abmelden</string>
+    <string name="unpair_title">Telefon abmelden?</string>
+    <string name="unpair_text">Das Telefon wird beim Hub ausgetragen und klingelt nicht mehr. Du kannst es jederzeit neu verbinden.</string>
+
+    <string name="setup_title">Mit der Türklingel verbinden</string>
+    <string name="setup_intro">Das Telefon bittet den Hub um Zugang. Du gibst es dann in der Weboberfläche des Hubs frei.</string>
+    <string name="setup_searching">Suche den Hub im WLAN …</string>
+    <string name="setup_found_item">%1$s  (%2$s)</string>
+    <string name="setup_address">Adresse des Hubs, z. B. 10.0.3.10:8088</string>
+    <string name="setup_name">Name dieses Telefons</string>
+    <string name="setup_request">Zugang anfordern</string>
+    <string name="setup_code">Code</string>
+    <string name="setup_wait_text">Öffne %1$s im Browser und gib dieses Telefon unter „Devices asking for access“ frei. Der Code dort muss gleich sein.</string>
+    <string name="setup_denied">Der Hub hat den Zugang abgelehnt.</string>
+    <string name="setup_token">Stattdessen Token eingeben</string>
+    <string name="setup_token_text">Lege in der Weboberfläche des Hubs einen Client an und gib hier sein Token ein.</string>
+    <string name="setup_token_hint">Token</string>
+
+    <string name="messages_title">Besuchernachrichten</string>
+    <string name="messages_none">Keine Nachrichten.</string>
+    <string name="player_error">Die Nachricht lässt sich nicht abspielen.</string>
+
+    <string name="err_address">Gib die Adresse des Hubs ein, z. B. 10.0.3.10:8088.</string>
+    <string name="err_unreachable">Der Hub ist nicht erreichbar. Ist das Telefon im WLAN zu Hause?</string>
+    <string name="err_bad_answer">Der Hub hat mit einem Fehler geantwortet (HTTP %1$d).</string>
+    <string name="err_expired">Die Anfrage ist abgelaufen. Bitte frage erneut an.</string>
+    <string name="err_not_paired">Der Hub kennt dieses Telefon nicht (mehr).</string>
+    <string name="err_too_many">Gerade fragen zu viele Geräte an. Versuche es in ein paar Minuten noch einmal.</string>
+    <string name="err_bad_name">Gib einen Namen mit höchstens 64 Zeichen ein.</string>
+    <string name="err_no_wifi">Das Telefon ist in keinem WLAN.</string>
+</resources>

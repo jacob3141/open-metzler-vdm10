@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Doorbell</string>
+
+    <string name="ch_status">Connection</string>
+    <string name="ch_status_desc">Shows that the app is connected to the doorbell hub.</string>
+    <string name="ch_ring">Doorbell rings</string>
+    <string name="ch_ring_desc">Rings when someone presses the doorbell.</string>
+    <string name="ch_info">Missed rings and messages</string>
+    <string name="ch_info_desc">Missed rings and new visitor messages.</string>
+
+    <string name="status_connecting">Connecting to the hub …</string>
+    <string name="status_connected">Ready for the doorbell</string>
+    <string name="status_no_wifi">Not in Wi-Fi. The doorbell only reaches you at home.</string>
+    <string name="status_unreachable">The hub cannot be reached</string>
+    <string name="status_not_paired">The hub does not know this phone any more</string>
+
+    <string name="ring_title">Someone is at the door</string>
+    <string name="ring_text">Doorbell at %1$s</string>
+    <string name="accept">Answer</string>
+    <string name="reject">Decline</string>
+    <string name="hang_up">Close</string>
+    <string name="missed_title">Missed ring</string>
+    <string name="missed_text">Someone rang at %1$s.</string>
+    <string name="taken_title">Ring answered</string>
+    <string name="taken_text">The ring at %1$s was answered by %2$s.</string>
+    <string name="message_title">New visitor message</string>
+    <string name="message_text">Recorded at %1$s</string>
+
+    <string name="call_ringing">Someone is at the door</string>
+    <string name="call_answering">Answering …</string>
+    <string name="call_answered">Answered. There is no sound yet.</string>
+    <string name="call_taken">%1$s answered</string>
+    <string name="call_over">The ring is over</string>
+    <string name="call_connecting">Connecting to the camera …</string>
+    <string name="call_live">Live</string>
+
+    <string name="main_hub">%1$s · hub %2$s</string>
+    <string name="main_live">Show the door</string>
+    <string name="main_note">The app only works in the home Wi-Fi. Video only, there is no sound yet.</string>
+    <string name="retry">Try again</string>
+    <string name="pair_again">Pair again</string>
+    <string name="allow">Allow</string>
+    <string name="perm_notify">Allow notifications, otherwise you will not hear the doorbell.</string>
+    <string name="perm_fullscreen">Allow full-screen notifications, so that a ring shows the door even when the phone is locked.</string>
+    <string name="perm_battery">Let the app run in the background without battery restrictions, so that it stays connected to the hub.</string>
+    <string name="unpair">Unpair</string>
+    <string name="unpair_title">Unpair this phone?</string>
+    <string name="unpair_text">The phone is removed from the hub and no longer rings. You can pair it again at any time.</string>
+
+    <string name="setup_title">Connect to the doorbell</string>
+    <string name="setup_intro">The phone asks the hub for access. You then approve it in the web interface of the hub.</string>
+    <string name="setup_searching">Looking for the hub in the Wi-Fi …</string>
+    <string name="setup_found_item">%1$s  (%2$s)</string>
+    <string name="setup_address">Address of the hub, e.g. 10.0.3.10:8088</string>
+    <string name="setup_name">Name of this phone</string>
+    <string name="setup_request">Ask for access</string>
+    <string name="setup_code">Code</string>
+    <string name="setup_wait_text">Open %1$s in a browser and approve this phone under \"Devices asking for access\". The code there must be the same.</string>
+    <string name="setup_denied">The hub denied the access.</string>
+    <string name="setup_token">Enter a token instead</string>
+    <string name="setup_token_text">Create a client in the web interface of the hub and enter its token here.</string>
+    <string name="setup_token_hint">Token</string>
+
+    <string name="messages_title">Visitor messages</string>
+    <string name="messages_none">No messages.</string>
+    <string name="player_error">The message cannot be played.</string>
+
+    <string name="err_address">Enter the address of the hub, e.g. 10.0.3.10:8088.</string>
+    <string name="err_unreachable">The hub cannot be reached. Is the phone in the home Wi-Fi?</string>
+    <string name="err_bad_answer">The hub answered with an error (HTTP %1$d).</string>
+    <string name="err_expired">The request has expired. Please ask again.</string>
+    <string name="err_not_paired">The hub does not know this phone (any more).</string>
+    <string name="err_too_many">Too many devices are asking at the moment. Try again in a few minutes.</string>
+    <string name="err_bad_name">Enter a name with at most 64 characters.</string>
+    <string name="err_no_wifi">The phone is not in a Wi-Fi.</string>
+</resources>
