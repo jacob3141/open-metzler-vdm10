@@ -54,11 +54,13 @@ func sameOrigin(r *http.Request) bool {
 	return err == nil && u.Host == r.Host
 }
 
+// admin protects the web interface with the admin password. Without a password it is
+// open, but requests from foreign pages are still refused.
 func (h *Hub) admin(next http.HandlerFunc) http.HandlerFunc {
 	want := []byte(h.cfg.AdminPassword)
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, pass, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(pass), want) != 1 {
+		if len(want) > 0 && (!ok || subtle.ConstantTimeCompare([]byte(pass), want) != 1) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Doorbell hub", charset="UTF-8"`)
 			http.Error(w, "Authentication required", http.StatusUnauthorized)
 			return

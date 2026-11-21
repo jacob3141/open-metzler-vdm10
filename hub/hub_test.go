@@ -449,3 +449,23 @@ func TestLiveNeedsAdminAndSameSite(t *testing.T) {
 		t.Fatal(res.Status)
 	}
 }
+
+func TestAdminWithoutPassword(t *testing.T) {
+	h := newHub(t, fakeDoorbell(t))
+	h.cfg.AdminPassword = ""
+	addr := serve(t, h)
+	resp, err := http.Get("http://" + addr + "/")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatal(err, resp.StatusCode)
+	}
+	req, _ := http.NewRequest("POST", "http://"+addr+"/admin/clients", strings.NewReader("name=Pixel"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://evil.example")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil || r.StatusCode != http.StatusForbidden {
+		t.Fatal(err, r.StatusCode)
+	}
+	if res := liveRequest(t, addr, false, "cross-site"); res.StatusCode != http.StatusForbidden {
+		t.Fatal(res.Status)
+	}
+}

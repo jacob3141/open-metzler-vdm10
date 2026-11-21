@@ -8,7 +8,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     environment:
-      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?HUB_ADMIN_PASSWORD is missing}
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:-}
       HUB_DOORBELL: ${HUB_DOORBELL:?HUB_DOORBELL is missing}
       HUB_RING_TIMEOUT: ${HUB_RING_TIMEOUT:-30}
       HUB_RECORD_SECONDS: ${HUB_RECORD_SECONDS:-30}

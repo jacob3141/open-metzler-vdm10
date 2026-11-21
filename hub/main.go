@@ -37,7 +37,7 @@ func main() {
 		cfg.MaxMessages = n
 	}
 	if cfg.AdminPassword == "" {
-		log.Fatal("HUB_ADMIN_PASSWORD must be set")
+		log.Print("HUB_ADMIN_PASSWORD is not set: the admin interface is open to everyone on the network")
 	}
 	store, err := OpenStore(cfg.Data)
 	if err != nil {

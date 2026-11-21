@@ -19,7 +19,7 @@ Local software for the Metzler VDM10-VM-POE video door station. It needs no clou
 
 Video and the button event work. Audio does not work yet, so visitor messages are silent. The Docker image has not been built yet.
 
-`doorbelld` has no authentication, so keep the door station on a trusted network. The hub requires an admin password and per-client tokens.
+`doorbelld` has no authentication, so keep the door station on a trusted network. The client API requires per-client tokens. The admin interface is protected by `HUB_ADMIN_PASSWORD`; if it is empty, anyone on the network can open it.
 
 ## Running the hub
 
@@ -29,7 +29,7 @@ cp .env.example .env   # then fill in the values
 docker compose up -d --build
 ```
 
-The web interface is on port 8088. Log in with any user name and the admin password.
+The web interface is on port 8088. If `HUB_ADMIN_PASSWORD` is set, log in with any user name and that password.
 
 It has a live view of the door camera. The hub sends the video as fragmented MP4 from `GET /admin/live`, and the page plays it with Media Source Extensions (`ManagedMediaSource` on iOS 17.1 and later). This works over plain HTTP. The hub connects to the door station video only while someone is watching or a message is being recorded.
 
