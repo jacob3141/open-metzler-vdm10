@@ -14,8 +14,15 @@ import (
 	"doorbell-hub/ws"
 )
 
-//go:embed templates/index.html templates/live.js
+//go:embed templates/index.html templates/live.js templates/admin.js
 var templates embed.FS
+
+func adminScript(w http.ResponseWriter, _ *http.Request) {
+	js, _ := templates.ReadFile("templates/admin.js")
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(js)
+}
 
 var page = template.Must(template.New("index.html").Funcs(template.FuncMap{
 	"when": func(t time.Time) string {
@@ -37,11 +44,19 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
 	mux.HandleFunc("GET /admin/live", h.admin(h.live))
 	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))
+	mux.HandleFunc("GET /admin/admin.js", h.admin(adminScript))
+	mux.HandleFunc("GET /admin/registrations", h.admin(h.pendingJSON))
+	mux.HandleFunc("POST /admin/registrations/{id}/approve", h.admin(h.approveRegistration))
+	mux.HandleFunc("POST /admin/registrations/{id}/deny", h.admin(h.denyRegistration))
+
+	mux.HandleFunc("POST /api/register", h.register)
+	mux.HandleFunc("GET /api/register/{id}", h.registerStatus)
 
 	mux.HandleFunc("GET /api/events", h.api(h.events))
 	mux.HandleFunc("GET /api/video", h.api(h.video))
 	mux.HandleFunc("GET /api/messages", h.api(h.listMessages))
 	mux.HandleFunc("GET /api/messages/{id}", h.api(h.apiMessage))
+	mux.HandleFunc("DELETE /api/client", h.api(h.deleteSelf))
 	return mux
 }
 
@@ -76,6 +91,9 @@ func (h *Hub) admin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// eventsPing is how often the hub pings a client app on /api/events.
+var eventsPing = 20 * time.Second
+
 type apiHandler func(w http.ResponseWriter, r *http.Request, c Client)
 
 func (h *Hub) api(next apiHandler) http.HandlerFunc {
@@ -93,6 +111,7 @@ func (h *Hub) api(next apiHandler) http.HandlerFunc {
 type pageData struct {
 	Status    Status
 	Clients   []Client
+	Pending   []registration
 	Messages  []Message
 	NewName   string
 	NewToken  string
@@ -106,7 +125,7 @@ func (h *Hub) render(w http.ResponseWriter, name, token string) {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	page.Execute(w, pageData{
-		Status: h.Status(), Clients: h.store.Clients(), Messages: h.store.Messages(), NewName: name, NewToken: token,
+		Status: h.Status(), Clients: h.store.Clients(), Pending: h.regs.Pending(), Messages: h.store.Messages(), NewName: name, NewToken: token,
 		Timeout: int(h.cfg.RingTimeout.Seconds()), RecordFor: int(h.cfg.RecordFor.Seconds()),
 	})
 }
@@ -160,6 +179,13 @@ func (h *Hub) serveMessage(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, h.store.messagePath(id))
 }
 
+// deleteSelf lets an app remove its own registration when the user unpairs it.
+func (h *Hub) deleteSelf(w http.ResponseWriter, _ *http.Request, c Client) {
+	h.store.DeleteClient(c.ID)
+	h.dropSessions(c.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Hub) apiMessage(w http.ResponseWriter, r *http.Request, _ Client) { h.serveMessage(w, r) }
 
 func (h *Hub) listMessages(w http.ResponseWriter, _ *http.Request, _ Client) {
@@ -186,16 +212,26 @@ func (h *Hub) events(w http.ResponseWriter, r *http.Request, c Client) {
 		return
 	}
 	defer conn.Close()
+	// A phone that leaves the network without closing would otherwise stay a session for minutes,
+	// and a ring would wait for its answer until the timeout.
+	conn.SetIdle(3 * eventsPing)
 	s := &Session{client: c, conn: conn, out: make(chan []byte, 32)}
 	h.addSession(s)
 	defer h.removeSession(s)
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
+		ping := time.NewTicker(eventsPing)
+		defer ping.Stop()
 		for {
 			select {
 			case m := <-s.out:
 				if conn.Write(ws.Text, m) != nil {
+					conn.Close()
+					return
+				}
+			case <-ping.C:
+				if conn.Ping() != nil {
 					conn.Close()
 					return
 				}

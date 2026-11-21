@@ -31,8 +31,11 @@
   #live { aspect-ratio: 16 / 9; }
   #live[hidden] { display: none; }
   button:disabled { opacity: .5; cursor: default; }
+  section[hidden] { display: none; }
+  .code { font: 600 17px/1 ui-monospace, monospace; letter-spacing: .08em; }
 </style>
 <script src="/admin/live.js" defer></script>
+<script src="/admin/admin.js" defer></script>
 </head>
 <body>
 <main>
@@ -61,6 +64,22 @@
     <code>{{.NewToken}}</code>
   </section>
   {{end}}
+
+  <section id="requests"{{if not .Pending}} hidden{{end}}>
+    <h2>Devices asking for access</h2>
+    <p class="muted">Approve only if the phone shows the same code.</p>
+    <div id="request-list">
+    {{range .Pending}}
+    <div class="row" data-id="{{.ID}}">
+      <div><strong>{{.Name}}</strong> <span class="muted">Code</span> <span class="code">{{.Code}}</span></div>
+      <div>
+        <form class="inline" method="post" action="/admin/registrations/{{.ID}}/deny"><button type="submit">Deny</button></form>
+        <form class="inline" method="post" action="/admin/registrations/{{.ID}}/approve"><button class="primary" type="submit">Approve</button></form>
+      </div>
+    </div>
+    {{end}}
+    </div>
+  </section>
 
   <section>
     <h2>Clients</h2>

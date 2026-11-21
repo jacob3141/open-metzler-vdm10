@@ -49,6 +49,7 @@ type Hub struct {
 	cfg   Config
 	store *Store
 	feed  *Feed
+	regs  *Registrations
 
 	mu        sync.Mutex
 	sessions  map[*Session]struct{}
@@ -59,7 +60,7 @@ type Hub struct {
 }
 
 func NewHub(cfg Config, store *Store) *Hub {
-	return &Hub{cfg: cfg, store: store, feed: NewFeed(cfg.Doorbell), sessions: map[*Session]struct{}{}}
+	return &Hub{cfg: cfg, store: store, feed: NewFeed(cfg.Doorbell), regs: NewRegistrations(), sessions: map[*Session]struct{}{}}
 }
 
 func notification(method string, params any) []byte {

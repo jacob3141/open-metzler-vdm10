@@ -34,8 +34,16 @@ type Conn struct {
 	r      *bufio.Reader
 	client bool
 	max    uint64
+	idle   time.Duration
 	mu     sync.Mutex
 }
+
+// SetIdle makes Read fail when nothing, not even a pong, arrives for d. Zero turns it off.
+// Combine it with Ping, so a live peer always has something to send.
+func (c *Conn) SetIdle(d time.Duration) { c.idle = d }
+
+// Ping sends a ping. A live peer answers with a pong.
+func (c *Conn) Ping() error { return c.Write(opPing, nil) }
 
 func accept(key string) string {
 	s := sha1.Sum([]byte(key + guid))
@@ -99,6 +107,9 @@ func (c *Conn) Close() error { return c.c.Close() }
 // Read returns the next data message. Ping and pong are handled internally.
 func (c *Conn) Read() (int, []byte, error) {
 	for {
+		if c.idle > 0 {
+			c.c.SetReadDeadline(time.Now().Add(c.idle))
+		}
 		var h [2]byte
 		if _, err := io.ReadFull(c.r, h[:]); err != nil {
 			return 0, nil, err

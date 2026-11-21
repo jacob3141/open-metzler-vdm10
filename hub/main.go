@@ -45,6 +45,9 @@ func main() {
 	}
 	h := NewHub(cfg, store)
 	go h.WatchDoorbell()
+	if os.Getenv("HUB_MDNS") != "off" {
+		announceHub(env("HUB_MDNS_NAME", "Doorbell hub"), cfg.Listen)
+	}
 	log.Printf("hub listening on %s, doorbell %s", cfg.Listen, cfg.Doorbell)
 	srv := &http.Server{Addr: cfg.Listen, Handler: h.Routes(), ReadHeaderTimeout: 10 * time.Second}
 	log.Fatal(srv.ListenAndServe())

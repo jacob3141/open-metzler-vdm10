@@ -12,6 +12,8 @@ services:
       HUB_DOORBELL: ${HUB_DOORBELL:?HUB_DOORBELL is missing}
       HUB_RING_TIMEOUT: ${HUB_RING_TIMEOUT:-30}
       HUB_RECORD_SECONDS: ${HUB_RECORD_SECONDS:-30}
+      HUB_MDNS: ${HUB_MDNS:-on}
+      HUB_MDNS_NAME: ${HUB_MDNS_NAME:-Doorbell hub}
     volumes:
       - hub-data:/data
     networks:

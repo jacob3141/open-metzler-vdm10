@@ -123,6 +123,8 @@ func (s *Store) Authenticate(token string) (Client, bool) {
 	return Client{}, false
 }
 
+const messageIDFormat = "20060102-150405"
+
 func (s *Store) messagePath(id string) string {
 	return filepath.Join(s.dir, "messages", id+".mp4")
 }
@@ -151,7 +153,12 @@ func (s *Store) Messages() []Message {
 		if err != nil {
 			continue
 		}
-		out = append(out, Message{ID: id, Time: info.ModTime(), Size: info.Size()})
+		// The ID is the time of the ring; the file time is when the recording ended.
+		t, err := time.ParseInLocation(messageIDFormat, id, time.Local)
+		if err != nil {
+			t = info.ModTime()
+		}
+		out = append(out, Message{ID: id, Time: t, Size: info.Size()})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
 	return out
@@ -174,7 +181,7 @@ func (s *Store) Prune(max int) {
 
 // SaveMessage stores a message atomically and returns its ID.
 func (s *Store) SaveMessage(data []byte, t time.Time) (string, error) {
-	id := t.Format("20060102-150405")
+	id := t.Format(messageIDFormat)
 	tmp := s.messagePath(id) + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o640); err != nil {
 		return "", err

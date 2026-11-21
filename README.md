@@ -11,7 +11,9 @@ Local software for the Metzler VDM10-VM-POE video door station. It needs no clou
 | `device/doorbelld` | WebSocket server on the door station: JSON-RPC, button events, video |
 | `device/mediad` | H.264 video pipeline on the door station |
 | `hub` | Docker service: live view, client registration, ring handling, visitor messages |
-| `hub/cmd/stubclient` | Command-line stand-in for the planned Android app |
+| `android` | Android app: rings with the door camera, live view, visitor messages (home Wi-Fi only) |
+| `hub/cmd/stubclient` | Command-line client for tests |
+| `hub/cmd/fakedoorbell` | Stand-in for `doorbelld` during development: rings on `POST /ring`, relays the video of a real door station |
 | `viewer` | Debug page that shows the video straight from the door station (needs HTTPS or localhost) |
 | `tools` | Small test clients |
 
@@ -33,16 +35,28 @@ The web interface is on port 8088. If `HUB_ADMIN_PASSWORD` is set, log in with a
 
 It has a live view of the door camera. The hub sends the video as fragmented MP4 from `GET /admin/live`, and the page plays it with Media Source Extensions (`ManagedMediaSource` on iOS 17.1 and later). This works over plain HTTP. The hub connects to the door station video only while someone is watching or a message is being recorded.
 
+The hub announces itself in the network by mDNS as `_doorbell-hub._tcp` (`HUB_MDNS=off` turns this off, `HUB_MDNS_NAME` sets the name), so the Android app finds it without typing an address.
+
+## Android app
+
+See [android/README.md](android/README.md). The app asks the hub for access, and you approve it in the web interface under "Devices asking for access", after checking that the phone shows the same code. It only works in the home Wi-Fi.
+
 ## Client API
 
-Send `Authorization: Bearer <token>` with every request. Create tokens in the web interface.
+A client gets its token in one of two ways:
+
+- **Ask for access:** `POST /api/register` with `{"name": "..."}` returns `{"id", "secret", "code"}`. The client shows the code and polls `GET /api/register/{id}` with `Authorization: Bearer <secret>`. The answer is `{"status": "pending"}`, `{"status": "denied"}` or, once the admin approved it, `{"status": "approved", "token": "..."}`. The token is handed out once. Requests expire after 10 minutes, and at most 10 can be open.
+- **By hand:** create a client in the web interface and copy its token.
+
+Then send `Authorization: Bearer <token>` with every request.
 
 | Endpoint | Purpose |
 |---|---|
-| `ws /api/events` | JSON-RPC 2.0 |
+| `ws /api/events` | JSON-RPC 2.0. The hub pings every 20 s and drops a client that has not answered for 60 s |
 | `ws /api/video` | One binary message per frame, H.264 Annex B, starting at the next keyframe |
 | `GET /api/messages` | List visitor messages as JSON |
 | `GET /api/messages/{id}` | Download a visitor message as MP4 |
+| `DELETE /api/client` | Remove this client from the hub (when the user unpairs the app) |
 
 The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}` and `message.new {id, time}`. Clients call `ring.accept {id}`, `ring.reject {id}` and `system.ping`.
 

@@ -9,5 +9,5 @@ COPY --from=build /out/doorbell-hub /doorbell-hub
 COPY --from=build --chown=65532:65532 /out/data /data
 USER 65532:65532
 VOLUME /data
-EXPOSE 8088
+EXPOSE 8088 5353/udp
 ENTRYPOINT ["/doorbell-hub"]
