@@ -14,7 +14,7 @@ import (
 	"doorbell-hub/ws"
 )
 
-//go:embed templates/index.html
+//go:embed templates/index.html templates/live.js
 var templates embed.FS
 
 var page = template.Must(template.New("index.html").Funcs(template.FuncMap{
@@ -35,6 +35,8 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/clients/{id}/delete", h.admin(h.deleteClient))
 	mux.HandleFunc("POST /admin/messages/{id}/delete", h.admin(h.deleteMessage))
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
+	mux.HandleFunc("GET /admin/live", h.admin(h.live))
+	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))
 
 	mux.HandleFunc("GET /api/events", h.api(h.events))
 	mux.HandleFunc("GET /api/video", h.api(h.video))
@@ -65,7 +67,7 @@ func (h *Hub) admin(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Foreign origin", http.StatusForbidden)
 			return
 		}
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self' 'unsafe-inline'; media-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		next(w, r)

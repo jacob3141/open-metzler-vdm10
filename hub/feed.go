@@ -86,7 +86,7 @@ func (f *Feed) run(ctx context.Context) {
 				break
 			}
 			if op == ws.Binary {
-				f.publish(Frame{Data: p, Key: isKey(p)})
+				f.publish(Frame{Data: p, Key: isKey(p), At: time.Now()})
 			}
 		}
 		stop()

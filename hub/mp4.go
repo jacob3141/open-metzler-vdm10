@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"time"
 )
 
 const (
@@ -12,10 +14,11 @@ const (
 	timescale   = 90000
 )
 
-// Frame is one H.264 picture in Annex B format.
+// Frame is one H.264 picture in Annex B format. At is when the hub received it.
 type Frame struct {
 	Data []byte
 	Key  bool
+	At   time.Time
 }
 
 func splitNALs(b []byte) [][]byte {
@@ -91,6 +94,61 @@ func avcC(sps, pps []byte) []byte {
 	return box("avcC", b)
 }
 
+// sample converts a frame to length-prefixed NAL units. SPS, PPS and access unit
+// delimiters are left out of the sample and returned separately.
+func sample(f Frame) (data, sps, pps []byte) {
+	for _, n := range splitNALs(f.Data) {
+		switch n[0] & 0x1f {
+		case 7:
+			sps = n
+			continue
+		case 8:
+			pps = n
+			continue
+		case 9:
+			continue
+		}
+		data = binary.BigEndian.AppendUint32(data, uint32(len(n)))
+		data = append(data, n...)
+	}
+	return data, sps, pps
+}
+
+// codecString is the RFC 6381 name of the stream, e.g. avc1.4D0028.
+func codecString(sps []byte) string {
+	return fmt.Sprintf("avc1.%02X%02X%02X", sps[1], sps[2], sps[3])
+}
+
+func stsd(sps, pps []byte) []byte {
+	avc1 := bytes.Join([][]byte{
+		make([]byte, 6), u16s(1), make([]byte, 16),
+		u16s(videoWidth, videoHeight), u32s(0x480000, 0x480000, 0), u16s(1),
+		make([]byte, 32), u16s(0x18, 0xFFFF), avcC(sps, pps),
+	}, nil)
+	return box("stsd", u32s(0, 1), box("avc1", avc1))
+}
+
+func trak(dur uint32, stbl []byte) []byte {
+	minf := box("minf",
+		box("vmhd", u32s(1), make([]byte, 8)),
+		box("dinf", box("dref", u32s(0, 1), box("url ", u32s(1)))),
+		stbl,
+	)
+	mdia := box("mdia",
+		box("mdhd", u32s(0, 0, 0, timescale, dur), u16s(0x55C4, 0)),
+		box("hdlr", u32s(0, 0), []byte("vide"), make([]byte, 12), []byte("VideoHandler\x00")),
+		minf,
+	)
+	return box("trak",
+		box("tkhd", u32s(3, 0, 0, 1, 0, dur, 0, 0), u16s(0, 0, 0, 0), matrix, u32s(videoWidth<<16, videoHeight<<16)),
+		mdia,
+	)
+}
+
+func mvhd(dur uint32) []byte {
+	return box("mvhd", u32s(0, 0, 0, timescale, dur, 0x10000), u16s(0x100, 0), make([]byte, 8), matrix, make([]byte, 24), u32s(2))
+}
+
 // WriteMP4 builds an MP4 file with the index at the start. The first frame must be a
 // keyframe with SPS and PPS.
 func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
@@ -102,23 +160,15 @@ func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
 	sizes := make([]uint32, 0, len(frames))
 	var keys []uint32
 	for i, f := range frames {
-		var size uint32
-		for _, n := range splitNALs(f.Data) {
-			switch n[0] & 0x1f {
-			case 7:
-				sps = n
-				continue
-			case 8:
-				pps = n
-				continue
-			case 9:
-				continue
-			}
-			binary.Write(&mdat, binary.BigEndian, uint32(len(n)))
-			mdat.Write(n)
-			size += uint32(len(n)) + 4
+		d, s, p := sample(f)
+		if s != nil {
+			sps = s
 		}
-		sizes = append(sizes, size)
+		if p != nil {
+			pps = p
+		}
+		mdat.Write(d)
+		sizes = append(sizes, uint32(len(d)))
 		if f.Key {
 			keys = append(keys, uint32(i+1))
 		}
@@ -142,36 +192,72 @@ func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
 		for _, k := range keys {
 			stss = append(stss, u32s(k)...)
 		}
-		avc1 := bytes.Join([][]byte{
-			make([]byte, 6), u16s(1), make([]byte, 16),
-			u16s(videoWidth, videoHeight), u32s(0x480000, 0x480000, 0), u16s(1),
-			make([]byte, 32), u16s(0x18, 0xFFFF), avcC(sps, pps),
-		}, nil)
 		stbl := box("stbl",
-			box("stsd", u32s(0, 1), box("avc1", avc1)),
+			stsd(sps, pps),
 			box("stts", u32s(0, 1, uint32(len(frames)), delta)),
 			box("stss", stss),
 			box("stsc", u32s(0, 1, 1, uint32(len(frames)), 1)),
 			box("stsz", stsz),
 			box("stco", u32s(0, 1, offset)),
 		)
-		minf := box("minf",
-			box("vmhd", u32s(1), make([]byte, 8)),
-			box("dinf", box("dref", u32s(0, 1), box("url ", u32s(1)))),
-			stbl,
-		)
-		mdia := box("mdia",
-			box("mdhd", u32s(0, 0, 0, timescale, dur), u16s(0x55C4, 0)),
-			box("hdlr", u32s(0, 0), []byte("vide"), make([]byte, 12), []byte("VideoHandler\x00")),
-			minf,
-		)
-		trak := box("trak",
-			box("tkhd", u32s(3, 0, 0, 1, 0, dur, 0, 0), u16s(0, 0, 0, 0), matrix, u32s(videoWidth<<16, videoHeight<<16)),
-			mdia,
-		)
-		mvhd := box("mvhd", u32s(0, 0, 0, timescale, dur, 0x10000), u16s(0x100, 0), make([]byte, 8), matrix, make([]byte, 24), u32s(2))
-		return box("moov", mvhd, trak)
+		return box("moov", mvhd(dur), trak(dur, stbl))
 	}
 	head := uint32(len(ftyp) + len(moov(0)) + 8)
 	return bytes.Join([][]byte{ftyp, moov(head), box("mdat", mdat.Bytes())}, nil), nil
+}
+
+// Fragmenter turns live frames into fragmented MP4 for Media Source Extensions:
+// one init segment, then one moof/mdat pair per frame.
+type Fragmenter struct {
+	SPS, PPS []byte
+	seq      uint32
+	base     uint64
+}
+
+// NewFragmenter needs a keyframe that carries SPS and PPS.
+func NewFragmenter(key Frame) (*Fragmenter, error) {
+	_, sps, pps := sample(key)
+	if !key.Key || len(sps) < 4 || len(pps) == 0 {
+		return nil, errors.New("mp4: keyframe with SPS and PPS expected")
+	}
+	return &Fragmenter{SPS: sps, PPS: pps}, nil
+}
+
+// Init returns the init segment.
+func (m *Fragmenter) Init() []byte {
+	ftyp := box("ftyp", []byte("iso5"), u32s(0x200), []byte("iso5iso6avc1mp41"))
+	stbl := box("stbl",
+		stsd(m.SPS, m.PPS),
+		box("stts", u32s(0, 0)),
+		box("stsc", u32s(0, 0)),
+		box("stsz", u32s(0, 0, 0)),
+		box("stco", u32s(0, 0)),
+	)
+	mvex := box("mvex", box("trex", u32s(0, 1, 1, 0, 0, 0)))
+	return bytes.Join([][]byte{ftyp, box("moov", mvhd(0), trak(0, stbl), mvex)}, nil)
+}
+
+// Fragment returns one media segment holding f, shown for dur ticks of 1/90000 s.
+// Decode times follow each other without gaps, so playback never stalls on a hole
+// when frames were dropped.
+func (m *Fragmenter) Fragment(f Frame, dur uint32) []byte {
+	data, _, _ := sample(f)
+	flags := uint32(0x01010000) // depends on other frames, not a sync sample
+	if f.Key {
+		flags = 0x02000000
+	}
+	m.seq++
+	seq, base := m.seq, m.base
+	m.base += uint64(dur)
+	moof := func(offset uint32) []byte {
+		return box("moof",
+			box("mfhd", u32s(0, seq)),
+			box("traf",
+				box("tfhd", u32s(0x020000, 1)),
+				box("tfdt", u32s(1<<24), binary.BigEndian.AppendUint64(nil, base)),
+				box("trun", u32s(0x000701, 1, offset, dur, uint32(len(data)), flags)),
+			),
+		)
+	}
+	return append(moof(uint32(len(moof(0))+8)), box("mdat", data)...)
 }

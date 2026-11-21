@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -309,7 +312,7 @@ func TestMessageIDRejectsTraversal(t *testing.T) {
 }
 
 func TestMP4Structure(t *testing.T) {
-	d, err := WriteMP4([]Frame{{[]byte(key), true}, {[]byte(delta), false}}, 0.1)
+	d, err := WriteMP4([]Frame{{Data: []byte(key), Key: true}, {Data: []byte(delta)}}, 0.1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +324,128 @@ func TestMP4Structure(t *testing.T) {
 	if strings.Index(string(d), "moov") > strings.Index(string(d), "mdat") {
 		t.Fatal("index must precede the data")
 	}
-	if _, err := WriteMP4([]Frame{{[]byte(delta), false}}, 1); err == nil {
+	if _, err := WriteMP4([]Frame{{Data: []byte(delta)}}, 1); err == nil {
 		t.Fatal("recording without a keyframe accepted")
+	}
+}
+
+// boxes lists the top-level MP4 boxes of b.
+func boxes(t *testing.T, b []byte) (names []string, bodies [][]byte) {
+	t.Helper()
+	for len(b) > 0 {
+		if len(b) < 8 {
+			t.Fatalf("truncated box header")
+		}
+		n := int(binary.BigEndian.Uint32(b))
+		if n < 8 || n > len(b) {
+			t.Fatalf("bad box size %d", n)
+		}
+		names = append(names, string(b[4:8]))
+		bodies = append(bodies, b[8:n])
+		b = b[n:]
+	}
+	return names, bodies
+}
+
+func TestFragmentedMP4(t *testing.T) {
+	m, err := NewFragmenter(Frame{Data: []byte(key), Key: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := codecString(m.SPS); got != "avc1.4D0028" {
+		t.Fatal(got)
+	}
+	init := m.Init()
+	if names, _ := boxes(t, init); strings.Join(names, ",") != "ftyp,moov" || !bytes.Contains(init, []byte("trex")) {
+		t.Fatal(names)
+	}
+	var base uint64
+	for i, f := range []Frame{{Data: []byte(key), Key: true}, {Data: []byte(delta)}} {
+		seg := m.Fragment(f, 3000)
+		names, bodies := boxes(t, seg)
+		if strings.Join(names, ",") != "moof,mdat" {
+			t.Fatal(names)
+		}
+		moof := bodies[0]
+		tfdt := moof[bytes.Index(moof, []byte("tfdt"))+8:]
+		if got := binary.BigEndian.Uint64(tfdt); got != base {
+			t.Fatalf("fragment %d: decode time %d, want %d", i, got, base)
+		}
+		base += 3000
+		trun := moof[bytes.Index(moof, []byte("trun"))+4:]
+		offset := binary.BigEndian.Uint32(trun[8:])
+		size := binary.BigEndian.Uint32(trun[16:])
+		if int(offset) != len(moof)+8+8 || int(size) != len(bodies[1]) {
+			t.Fatalf("fragment %d: data offset %d size %d, moof %d mdat %d", i, offset, size, len(moof)+8, len(bodies[1]))
+		}
+		if bytes.Contains(bodies[1], []byte{0x67, 0x4d}) {
+			t.Fatal("SPS must not be inside the sample")
+		}
+	}
+	if _, err := NewFragmenter(Frame{Data: []byte(delta)}); err == nil {
+		t.Fatal("fragmenter without keyframe accepted")
+	}
+}
+
+func TestFrameDur(t *testing.T) {
+	t0 := time.Now()
+	for _, c := range []struct {
+		d    time.Duration
+		want uint32
+	}{{40 * time.Millisecond, 3600}, {0, 3000}, {-time.Second, 3000}, {2 * time.Second, 3000}} {
+		if got := frameDur(t0, t0.Add(c.d)); got != c.want {
+			t.Fatalf("%v: %d, want %d", c.d, got, c.want)
+		}
+	}
+}
+
+func liveRequest(t *testing.T, addr string, auth bool, site string) *http.Response {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/admin/live", nil)
+	if auth {
+		req.SetBasicAuth("admin", "pw")
+	}
+	if site != "" {
+		req.Header.Set("Sec-Fetch-Site", site)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { res.Body.Close() })
+	return res
+}
+
+func TestLiveStreamsFragmentedMP4(t *testing.T) {
+	h := newHub(t, fakeDoorbell(t))
+	addr := serve(t, h)
+	res := liveRequest(t, addr, true, "same-origin")
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "video/mp4" || res.Header.Get("X-Video-Codec") != "avc1.4D0028" {
+		t.Fatal(res.Status, res.Header)
+	}
+	var got []byte
+	buf := make([]byte, 4096)
+	for !bytes.Contains(got, []byte("mdat")) || bytes.Count(got, []byte("moof")) < 3 {
+		n, err := res.Body.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, buf[:n]...)
+	}
+	if !bytes.HasPrefix(got[4:], []byte("ftyp")) {
+		t.Fatal("stream must start with the init segment")
+	}
+}
+
+func TestLiveNeedsAdminAndSameSite(t *testing.T) {
+	h := newHub(t, fakeDoorbell(t))
+	addr := serve(t, h)
+	if res := liveRequest(t, addr, false, ""); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.Status)
+	}
+	if res := liveRequest(t, addr, true, "cross-site"); res.StatusCode != http.StatusForbidden {
+		t.Fatal(res.Status)
 	}
 }

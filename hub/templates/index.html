@@ -27,7 +27,12 @@
   code { display: block; padding: 10px; margin-top: 8px; background: var(--code); border-radius: 6px; word-break: break-all; font-size: 13px; }
   video { display: block; width: 100%; margin-top: 8px; border-radius: 6px; background: #000; }
   .status { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+  .live-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  #live { aspect-ratio: 16 / 9; }
+  #live[hidden] { display: none; }
+  button:disabled { opacity: .5; cursor: default; }
 </style>
+<script src="/admin/live.js" defer></script>
 </head>
 <body>
 <main>
@@ -38,6 +43,16 @@
     {{if .Status.Ringing}}<span class="ok">Ringing now</span>{{end}}
     {{if .Status.Recording}}<span class="ok">Recording</span>{{end}}
   </div>
+
+  <section>
+    <h2>Live view</h2>
+    <div class="live-bar">
+      <button id="live-toggle" class="primary" type="button">Start live view</button>
+      <span id="live-state" class="muted" role="status" aria-live="polite"></span>
+    </div>
+    <video id="live" hidden playsinline muted></video>
+    <p class="muted">Video only, there is no audio yet. The hub connects to the door station only while the live view is running.</p>
+  </section>
 
   {{if .NewToken}}
   <section>

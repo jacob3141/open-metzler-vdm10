@@ -10,9 +10,9 @@ Local software for the Metzler VDM10-VM-POE video door station. It needs no clou
 |---|---|
 | `device/doorbelld` | WebSocket server on the door station: JSON-RPC, button events, video |
 | `device/mediad` | H.264 video pipeline on the door station |
-| `hub` | Docker service: client registration, ring handling, visitor messages |
+| `hub` | Docker service: live view, client registration, ring handling, visitor messages |
 | `hub/cmd/stubclient` | Command-line stand-in for the planned Android app |
-| `viewer` | Browser page that shows the live video |
+| `viewer` | Debug page that shows the video straight from the door station (needs HTTPS or localhost) |
 | `tools` | Small test clients |
 
 ## Status
@@ -29,7 +29,9 @@ cp .env.example .env   # then fill in the values
 docker compose up -d --build
 ```
 
-The web interface is on port 8088.
+The web interface is on port 8088. Log in with any user name and the admin password.
+
+It has a live view of the door camera. The hub sends the video as fragmented MP4 from `GET /admin/live`, and the page plays it with Media Source Extensions (`ManagedMediaSource` on iOS 17.1 and later). This works over plain HTTP. The hub connects to the door station video only while someone is watching or a message is being recorded.
 
 ## Client API
 
