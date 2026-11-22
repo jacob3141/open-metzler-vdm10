@@ -9,6 +9,12 @@ Client app for the doorbell hub. It only works in the home Wi-Fi, there is no cl
 - Visitor messages have video and sound.
 - English, with a German translation.
 
+## Installing
+
+Open the web interface of the hub and scan the QR code under "Android app" with the phone, or open `http://doorbell-hub.home.arpa:8088/app.apk` on it. The first time, Android asks to allow installing apps from the browser. For an update, open the link again: the app stays paired.
+
+GitHub Actions builds the app with every push and puts it into the Docker image of the hub, signed with the release key from the secrets `DOORBELL_KEYSTORE_B64` (the keystore in base64, alias `doorbell`) and `DOORBELL_KEYSTORE_PASSWORD`. Android only updates an app signed with the same key, so keep the key: with a new one the app has to be uninstalled and paired again.
+
 Android 10 (API 29) or newer. On Android 14 and newer, allow full-screen notifications when the app asks, otherwise a ring on a locked phone only shows a notification. Exempt the app from battery optimization so that it stays connected.
 
 ## Building
@@ -20,6 +26,8 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 ./gradlew testDebugUnitTest assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+A debug build is signed with the debug key of your machine, so it does not update an app installed from the hub. To build the release, set `DOORBELL_KEYSTORE` (path to the keystore) and `DOORBELL_KEYSTORE_PASSWORD`, then run `./gradlew assembleRelease`.
 
 ## How it works
 

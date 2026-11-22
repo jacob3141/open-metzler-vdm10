@@ -50,6 +50,9 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/registrations/{id}/approve", h.admin(h.approveRegistration))
 	mux.HandleFunc("POST /admin/registrations/{id}/deny", h.admin(h.denyRegistration))
 
+	mux.HandleFunc("GET /admin/app-qr.png", h.admin(appQR))
+	mux.HandleFunc("GET /app.apk", h.serveApp)
+
 	mux.HandleFunc("POST /api/register", h.register)
 	mux.HandleFunc("GET /api/register/{id}", h.registerStatus)
 
@@ -87,7 +90,7 @@ func (h *Hub) admin(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Foreign origin", http.StatusForbidden)
 			return
 		}
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; media-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		next(w, r)
@@ -120,9 +123,11 @@ type pageData struct {
 	NewToken  string
 	Timeout   int
 	RecordFor int
+	App       bool
+	AppURL    string
 }
 
-func (h *Hub) render(w http.ResponseWriter, name, token string) {
+func (h *Hub) render(w http.ResponseWriter, r *http.Request, name, token string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if token != "" {
 		w.Header().Set("Cache-Control", "no-store")
@@ -130,10 +135,11 @@ func (h *Hub) render(w http.ResponseWriter, name, token string) {
 	page.Execute(w, pageData{
 		Status: h.Status(), Clients: h.store.Clients(), Pending: h.regs.Pending(), Messages: h.store.Messages(), NewName: name, NewToken: token,
 		Timeout: int(h.cfg.RingTimeout.Seconds()), RecordFor: int(h.cfg.RecordFor.Seconds()),
+		App: h.hasApp(), AppURL: appURL(r),
 	})
 }
 
-func (h *Hub) index(w http.ResponseWriter, r *http.Request) { h.render(w, "", "") }
+func (h *Hub) index(w http.ResponseWriter, r *http.Request) { h.render(w, r, "", "") }
 
 func (h *Hub) addClient(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
@@ -146,7 +152,7 @@ func (h *Hub) addClient(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Saving failed", http.StatusInternalServerError)
 		return
 	}
-	h.render(w, name, token)
+	h.render(w, r, name, token)
 }
 
 func (h *Hub) deleteClient(w http.ResponseWriter, r *http.Request) {

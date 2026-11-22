@@ -11,13 +11,29 @@ android {
         applicationId = "io.github.jacob3141.doorbell"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
+        // CI counts up, so the phone takes each app from the hub as an update
+        versionCode = System.getenv("DOORBELL_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = "0.1.0"
+    }
+
+    // The release key lives outside the repository (a GitHub secret in CI). Without it the
+    // release build stays unsigned.
+    val keystore = System.getenv("DOORBELL_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("doorbell") {
+                storeFile = keystore
+                storePassword = System.getenv("DOORBELL_KEYSTORE_PASSWORD")
+                keyAlias = "doorbell"
+                keyPassword = System.getenv("DOORBELL_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (keystore != null) signingConfig = signingConfigs.getByName("doorbell")
         }
     }
 

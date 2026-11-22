@@ -1,0 +1,1 @@
+CI puts the Android app here as doorbell.apk; the Docker image serves it at /app.apk.

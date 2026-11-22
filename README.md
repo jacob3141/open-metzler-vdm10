@@ -60,6 +60,8 @@ Then send `Authorization: Bearer <token>` with every request.
 | `GET /api/messages/{id}` | Download a visitor message as MP4: H.264 and, if the door station sends sound, PCM (`sowt`) |
 | `DELETE /api/client` | Remove this client from the hub (when the user unpairs the app) |
 
+`GET /app.apk` downloads the Android app, without a token: the hub has it when CI built its Docker image (`HUB_APP`, default `/app/doorbell.apk`).
+
 The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}` and `message.new {id, time}`. Clients call `ring.accept {id}`, `ring.reject {id}` and `system.ping`.
 
 ## License

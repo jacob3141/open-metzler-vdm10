@@ -32,6 +32,7 @@ func main() {
 		RingTimeout:   envSeconds("HUB_RING_TIMEOUT", 30),
 		RecordFor:     envSeconds("HUB_RECORD_SECONDS", 30),
 		MaxMessages:   200,
+		App:           env("HUB_APP", "/app/doorbell.apk"),
 	}
 	if n, err := strconv.Atoi(os.Getenv("HUB_MAX_MESSAGES")); err == nil && n > 0 {
 		cfg.MaxMessages = n

@@ -33,6 +33,9 @@
   button:disabled { opacity: .5; cursor: default; }
   section[hidden] { display: none; }
   .code { font: 600 17px/1 ui-monospace, monospace; letter-spacing: .08em; }
+  .app { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+  .app img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; }
+  .app div { flex: 1 1 260px; }
 </style>
 <script src="/admin/live.js" defer></script>
 <script src="/admin/admin.js" defer></script>
@@ -80,6 +83,19 @@
     {{end}}
     </div>
   </section>
+
+  {{if .App}}
+  <section>
+    <h2>Android app</h2>
+    <div class="app">
+      <img src="/admin/app-qr.png" alt="QR code of the download link">
+      <div>
+        <p>Scan the code with the phone, in the home Wi-Fi, and install the app. The first time, Android asks to allow installing apps from the browser. Then open the app and ask for access; it shows up here under "Devices asking for access".</p>
+        <p class="muted">Download: <a href="{{.AppURL}}">{{.AppURL}}</a>. For an update open the link again; the app stays paired.</p>
+      </div>
+    </div>
+  </section>
+  {{end}}
 
   <section>
     <h2>Clients</h2>

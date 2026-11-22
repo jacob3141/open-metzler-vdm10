@@ -19,6 +19,7 @@ type Config struct {
 	RingTimeout   time.Duration
 	RecordFor     time.Duration
 	MaxMessages   int
+	App           string // the Android app the hub hands out
 }
 
 // Session is a connected client app.
