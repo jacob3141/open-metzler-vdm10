@@ -1,6 +1,8 @@
 // fakedoorbell stands in for doorbelld while developing the hub and the app. It speaks the
 // JSON-RPC of the door station on /, relays video, sound and speaker of a real door station on
 // /video, /audio and /speaker, and presses the button when it gets POST /ring.
+// POST /tamper?open=1 takes the station off the wall and sounds its siren (alarm.stop
+// silences it), POST /tamper?open=0 puts it back.
 //
 //	fakedoorbell -listen :8090 -video doorbell.home.arpa:8080
 //	curl -X POST localhost:8090/ring
@@ -8,8 +10,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +27,28 @@ func main() {
 
 	var mu sync.Mutex
 	conns := map[*ws.Conn]bool{}
+	open, alarm := false, false
+	// tamper tells every hub the state of the tamper switch. mu must be held.
+	tamper := func(c *ws.Conn) {
+		m := fmt.Sprintf(`{"jsonrpc":"2.0","method":"tamper","params":{"open":%t,"alarm":%t,"time":%d}}`, open, alarm, time.Now().Unix())
+		for h := range conns {
+			if c == nil || h == c {
+				h.Write(ws.Text, []byte(m))
+			}
+		}
+	}
+
+	http.HandleFunc("POST /tamper", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		open = r.FormValue("open") == "1"
+		if open {
+			alarm = true
+		}
+		tamper(nil)
+		mu.Unlock()
+		log.Printf("tamper: open %t, siren %t", open, alarm)
+		w.Write([]byte("ok\n"))
+	})
 
 	http.HandleFunc("POST /ring", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -80,11 +106,20 @@ func main() {
 		}
 		mu.Lock()
 		conns[c] = true
+		tamper(c)
 		mu.Unlock()
 		log.Print("hub connected")
 		for {
-			if _, _, err := c.Read(); err != nil {
+			_, p, err := c.Read()
+			if err != nil {
 				break
+			}
+			if strings.Contains(string(p), `"alarm.stop"`) {
+				mu.Lock()
+				alarm = false
+				tamper(nil)
+				mu.Unlock()
+				log.Print("tamper: siren stopped")
 			}
 		}
 		mu.Lock()

@@ -59,6 +59,10 @@ type Hub struct {
 	recording bool
 	connected bool
 	lastRing  time.Time
+
+	door       *ws.Conn // JSON-RPC connection to the doorbell, nil while it is away
+	tamper     tamperState
+	lastTamper time.Time
 }
 
 func NewHub(cfg Config, store *Store) *Hub {
@@ -221,10 +225,15 @@ func (h *Hub) missIfAllRejected(r *ring) {
 	h.miss(r)
 }
 
+// addSession also tells a new app the state of the tamper switch once there was an alarm, so
+// it never keeps one that ended while it was away.
 func (h *Hub) addSession(s *Session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.sessions[s] = struct{}{}
+	if !h.lastTamper.IsZero() || h.tamper.Alarm {
+		s.send(h.tamperNotification())
+	}
 }
 
 // removeSession treats a disconnected client like a rejection.
@@ -239,30 +248,37 @@ func (h *Hub) removeSession(s *Session) {
 
 // Status is the state shown in the web interface.
 type Status struct {
-	Connected bool
-	Sessions  map[string]bool
-	Recording bool
-	Ringing   bool
-	LastRing  time.Time
+	Connected  bool
+	Sessions   map[string]bool
+	Recording  bool
+	Ringing    bool
+	LastRing   time.Time
+	Tamper     tamperState
+	LastTamper time.Time
 }
 
 func (h *Hub) Status() Status {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	st := Status{Connected: h.connected, Sessions: map[string]bool{}, Recording: h.recording, Ringing: h.current != nil, LastRing: h.lastRing}
+	st := Status{
+		Connected: h.connected, Sessions: map[string]bool{}, Recording: h.recording, Ringing: h.current != nil, LastRing: h.lastRing,
+		Tamper: h.tamper, LastTamper: h.lastTamper,
+	}
 	for s := range h.sessions {
 		st.Sessions[s.client.ID] = true
 	}
 	return st
 }
 
-func (h *Hub) setConnected(v bool) {
+func (h *Hub) setDoor(c *ws.Conn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.connected = v
+	h.door = c
+	h.connected = c != nil
 }
 
-// WatchDoorbell keeps the JSON-RPC connection to the doorbell and handles button presses.
+// WatchDoorbell keeps the JSON-RPC connection to the doorbell and handles button presses
+// and the tamper switch.
 func (h *Hub) WatchDoorbell() {
 	for {
 		c, err := ws.Dial(h.cfg.Doorbell, "/", "", 1<<20, 10*time.Second)
@@ -272,7 +288,7 @@ func (h *Hub) WatchDoorbell() {
 			continue
 		}
 		log.Print("doorbell connected")
-		h.setConnected(true)
+		h.setDoor(c)
 		for {
 			op, p, err := c.Read()
 			if err != nil {
@@ -280,14 +296,24 @@ func (h *Hub) WatchDoorbell() {
 				break
 			}
 			var m struct {
-				Method string `json:"method"`
+				Method string          `json:"method"`
+				Params json.RawMessage `json:"params"`
 			}
-			if op == ws.Text && json.Unmarshal(p, &m) == nil && m.Method == "button.pressed" {
+			if op != ws.Text || json.Unmarshal(p, &m) != nil {
+				continue
+			}
+			switch m.Method {
+			case "button.pressed":
 				h.Press()
+			case "tamper":
+				var st tamperState
+				if json.Unmarshal(m.Params, &st) == nil {
+					h.Tamper(st)
+				}
 			}
 		}
 		c.Close()
-		h.setConnected(false)
+		h.setDoor(nil)
 		time.Sleep(2 * time.Second)
 	}
 }

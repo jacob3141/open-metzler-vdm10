@@ -8,6 +8,8 @@
     <string name="ch_ring_desc">Klingelt, wenn jemand an der Tür klingelt.</string>
     <string name="ch_info">Verpasstes Klingeln und Nachrichten</string>
     <string name="ch_info_desc">Verpasstes Klingeln und neue Besuchernachrichten.</string>
+    <string name="ch_alarm">Sabotagealarm</string>
+    <string name="ch_alarm_desc">Schlägt an, wenn jemand die Türstation von der Wand nimmt.</string>
 
     <string name="status_connecting">Verbinde mit dem Hub …</string>
     <string name="status_connected">Bereit für die Türklingel</string>
@@ -26,6 +28,14 @@
     <string name="taken_text">Das Klingeln um %1$s hat %2$s angenommen.</string>
     <string name="message_title">Neue Besuchernachricht</string>
     <string name="message_text">Aufgenommen um %1$s</string>
+
+    <string name="alarm_title">Sabotagealarm</string>
+    <string name="alarm_open_siren">Die Türstation wurde um %1$s von der Wand genommen. Ihre Sirene heult.</string>
+    <string name="alarm_open">Die Türstation wurde um %1$s von der Wand genommen.</string>
+    <string name="alarm_back_siren">Die Türstation wurde um %1$s von der Wand genommen und ist wieder dran. Ihre Sirene heult noch.</string>
+    <string name="alarm_back">Die Türstation wurde um %1$s von der Wand genommen und ist wieder dran.</string>
+    <string name="alarm_stop">Alarm stoppen</string>
+    <string name="alarm_stop_failed">Der Hub ist nicht erreichbar, der Alarm läuft weiter.</string>
 
     <string name="call_ringing">Es klingelt an der Tür</string>
     <string name="call_answering">Nehme an …</string>

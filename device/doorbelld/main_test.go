@@ -178,7 +178,7 @@ func TestButtonPressRingsOnceAndIgnoresGlitches(t *testing.T) {
 	var d debounce
 	presses := func(vals string) (n int) { // one reading per character
 		for _, v := range vals {
-			if d.update(v == '1') {
+			if d.update(v == '1') && d.pressed {
 				n++
 			}
 		}

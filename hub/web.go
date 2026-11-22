@@ -43,6 +43,7 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/clients/{id}/delete", h.admin(h.deleteClient))
 	mux.HandleFunc("POST /admin/messages/{id}/delete", h.admin(h.deleteMessage))
 	mux.HandleFunc("POST /admin/settings", h.admin(h.saveSettings))
+	mux.HandleFunc("POST /admin/alarm/stop", h.admin(h.stopAlarm))
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
 	mux.HandleFunc("GET /admin/live", h.admin(h.live))
 	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))
@@ -298,6 +299,11 @@ func (h *Hub) handleRPC(s *Session, p []byte) []byte {
 			return rpcReply(req.ID, map[string]any{"video": "/api/video", "audio": "/api/audio", "talk": "/api/talk"}, 0, "")
 		}
 		return rpcReply(req.ID, nil, -32000, "Ring is no longer active")
+	case "alarm.stop":
+		if err := h.StopAlarm(); err != nil {
+			return rpcReply(req.ID, nil, -32000, err.Error())
+		}
+		return rpcReply(req.ID, true, 0, "")
 	case "ring.reject":
 		if h.Reject(s, req.Params.ID) {
 			return rpcReply(req.ID, true, 0, "")

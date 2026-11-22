@@ -61,6 +61,10 @@ type hub struct {
 
 	inMu    sync.Mutex
 	mediaIn io.Writer // stdin of mediad while it runs
+
+	alarmMu    sync.Mutex
+	tamperOpen bool          // the station is off the wall
+	sirenStop  chan struct{} // closed to silence the siren; nil while it is quiet
 }
 
 // claimSpeaker makes c the one client that feeds the speaker.
@@ -321,6 +325,12 @@ func (h *hub) dispatch(msg []byte) []byte {
 	switch req.Method {
 	case "system.ping":
 		resp.Result = "pong"
+	case "tamper.state":
+		h.alarmMu.Lock()
+		resp.Result = map[string]any{"open": h.tamperOpen, "alarm": h.sirenStop != nil}
+		h.alarmMu.Unlock()
+	case "alarm.stop":
+		resp.Result = h.stopSiren()
 	case "system.info":
 		resp.Result = map[string]any{
 			"device":   "Metzler VDM10-VM-POE",
@@ -364,6 +374,9 @@ func (h *hub) serve(conn net.Conn) {
 	}
 	h.add(c)
 	defer h.remove(c)
+	if c.kind == kindRPC {
+		c.out <- makeFrame(opText, h.tamperMessage())
+	}
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -398,6 +411,9 @@ func (h *hub) serve(conn net.Conn) {
 		case opBinary:
 			if c.kind != kindSpeaker {
 				return
+			}
+			if h.sirenActive() {
+				continue // the siren has the speaker
 			}
 			if err := h.play(p); err != nil {
 				log.Printf("speaker: %v", err)
@@ -447,7 +463,7 @@ func (h *hub) watchButton(gpio string) {
 			continue
 		}
 		failed = false
-		if btn.update(len(b) > 0 && b[0] == '1') {
+		if btn.update(len(b) > 0 && b[0] == '1') && btn.pressed {
 			log.Print("button pressed")
 			h.broadcast(encode(map[string]any{
 				"jsonrpc": "2.0",
@@ -458,14 +474,14 @@ func (h *hub) watchButton(gpio string) {
 	}
 }
 
-// debounce reports a press once the button reads high twice in a row, and the next one
-// only after it read low twice in a row.
+// debounce takes a new state of a switch only once it reads the same twice in a row: a
+// button counts as pressed after two high readings and as released after two low ones.
 type debounce struct {
 	pressed bool
 	same    int
 }
 
-// update takes one reading and returns true when the button counts as newly pressed.
+// update takes one reading and returns true when the state changed.
 func (d *debounce) update(high bool) bool {
 	if high == d.pressed {
 		d.same = 0
@@ -475,7 +491,7 @@ func (d *debounce) update(high bool) bool {
 		return false
 	}
 	d.pressed, d.same = high, 0
-	return d.pressed
+	return true
 }
 
 // runMedia starts mediad, hands its frames to the clients of /video and /audio, and feeds it
@@ -534,12 +550,14 @@ func main() {
 	listen := flag.String("listen", ":8080", "address of the WebSocket server")
 	media := flag.String("media", "/home/app/oi/mediad", "path to mediad, empty to disable")
 	button := flag.String("button", "32", "sysfs GPIO of the bell button, empty to disable")
+	siren := flag.Duration("siren", 30*time.Second, "how long the siren sounds when the station is taken off the wall, 0 for silence")
 	flag.Parse()
 
 	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
 	if *button != "" {
 		go h.watchButton(*button)
 	}
+	go h.watchTamper(*siren)
 	if *media != "" {
 		go h.runMedia(*media)
 	}

@@ -20,10 +20,10 @@ flowchart TB
     direction LR
     doorbelld["doorbelld<br/>WebSocket server :8080"]
     mediad["mediad<br/>H.264 video, PCM sound"]
-    hw["Camera · Microphone · Speaker<br/>Bell button (GPIO4_0)"]
+    hw["Camera · Microphone · Speaker<br/>Bell button (GPIO4_0)<br/>Tamper switch"]
     doorbelld <-- "stdin / stdout" --> mediad
     mediad <--> hw
-    hw -- button --> doorbelld
+    hw -- "button, tamper switch" --> doorbelld
   end
 
   app <-- "ws /api/* (token), mDNS, /app.apk" --> hub
@@ -43,13 +43,15 @@ The door station only talks to the hub, and phones and browsers only talk to the
 | `hub` | Docker service: live view, client registration, ring handling, visitor messages |
 | `android` | Android app: rings with the door camera and its sound, push-to-talk, live view, visitor messages (home Wi-Fi only) |
 | `hub/cmd/stubclient` | Command-line client for tests |
-| `hub/cmd/fakedoorbell` | Stand-in for `doorbelld` during development: rings on `POST /ring`, relays video and sound of a real door station |
+| `hub/cmd/fakedoorbell` | Stand-in for `doorbelld` during development: rings on `POST /ring`, simulates the tamper switch on `POST /tamper?open=1`, relays video and sound of a real door station |
 | `viewer` | Debug page that shows the video straight from the door station (needs HTTPS or localhost) |
 | `tools` | Small test clients |
 
 ## Status
 
 Video, microphone, speaker and the button event work: the app shows and plays the door, you talk to the door while holding a button, visitor messages have sound. The live view of the web interface plays the sound too.
+
+Tamper alarm: when someone takes the door station off the wall, its own siren sounds for 30 seconds (also without the hub), the hub records a clip like a visitor message, and the app raises an alarm with a button that stops the siren. The admin page can stop it too.
 
 `doorbelld` has no authentication, so keep the door station on a trusted network. The client API requires per-client tokens. The admin interface is protected by `HUB_ADMIN_PASSWORD`; if it is empty, anyone on the network can open it.
 
@@ -92,7 +94,7 @@ Then send `Authorization: Bearer <token>` with every request.
 
 `GET /app.apk` downloads the Android app, without a token: the hub has it when CI built its Docker image (`HUB_APP`, default `/app/doorbell.apk`).
 
-The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}` and `message.new {id, time}`. Clients call `ring.accept {id}`, `ring.reject {id}` and `system.ping`.
+The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}`, `message.new {id, time}` and `tamper {open, alarm, time}` (the station is off the wall, its siren sounds; sent on every change, and on connect once there was a tamper alarm). Clients call `ring.accept {id}`, `ring.reject {id}`, `alarm.stop` and `system.ping`.
 
 ## Releases
 
@@ -468,6 +470,15 @@ Treat physical access as equivalent to root access.
   pressed.  The device tree declares a `gpio-keys` button on GPIO4_3 (`/dev/event0`,
   code 5), but that pin never changes on this board, so `doorbelld` polls GPIO 32
   every 25 ms instead (`-button`).
+- **Tamper switch.** A switch on the back is pressed while the station is mounted.
+  The vendor driver `DDM` reads it (GPIO7_4); like the original `hicore`, `doorbelld`
+  asks it with the ioctl `DDM_IOC_DOOR_TAMPER` (`0x40044204`) on `/dev/DDM/alarmV2`,
+  which gives 1 while pressed and 0 when the station is off the wall.  `doorbelld`
+  reports every change as the notification `tamper {open, alarm, time}`, sends it to
+  each new RPC client, and plays a siren through the speaker for `-siren` (default
+  30 s; talk is muted meanwhile) when the switch opens.  `alarm.stop` silences it,
+  `tamper.state` returns the state.  The state at start counts as normal, so a station
+  that boots on the bench stays quiet.
 - **Audio levels.** `mediad` sets the microphone gain to 30 (`MEDIAD_MIC_VOL`, range
   -78..80; at 60 the street noise alone was at -25 dBFS and voices clipped) and the
   speaker to 0 dB (`MEDIAD_SPEAKER_VOL`, -121..6; after a codec reset it is at -21 dB,

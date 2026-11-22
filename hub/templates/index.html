@@ -36,6 +36,9 @@
   .app { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
   .app img { width: 180px; height: 180px; image-rendering: pixelated; background: #fff; border-radius: 6px; }
   .app div { flex: 1 1 260px; }
+  section.alarm { border-color: var(--bad); border-width: 2px; }
+  section.alarm h2 { color: var(--bad); }
+  section.alarm button.primary { background: var(--bad); border-color: var(--bad); }
 </style>
 <script src="/admin/live.js" defer></script>
 <script src="/admin/admin.js" defer></script>
@@ -48,7 +51,20 @@
     <span class="muted">Last ring: {{when .Status.LastRing}}</span>
     {{if .Status.Ringing}}<span class="ok">Ringing now</span>{{end}}
     {{if .Status.Recording}}<span class="ok">Recording</span>{{end}}
+    {{if not .Status.LastTamper.IsZero}}<span class="muted">Last tamper alarm: {{when .Status.LastTamper}}</span>{{end}}
   </div>
+
+  {{if or .Status.Tamper.Open .Status.Tamper.Alarm}}
+  <section class="alarm">
+    <h2>Tamper alarm</h2>
+    <p>{{if .Status.Tamper.Open}}The door station is off the wall.{{else}}The door station is back on the wall.{{end}}
+      {{if .Status.Tamper.Alarm}}Its siren sounds.{{end}}
+      The hub recorded a clip at {{when .Status.LastTamper}}, see "Visitor messages".</p>
+    {{if .Status.Tamper.Alarm}}
+    <form class="inline" method="post" action="/admin/alarm/stop"><button class="primary" type="submit">Stop alarm</button></form>
+    {{end}}
+  </section>
+  {{end}}
 
   <section>
     <h2>Live view</h2>

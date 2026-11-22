@@ -16,11 +16,13 @@ object Notifications {
     const val CH_STATUS = "status"
     const val CH_RING = "ring"
     const val CH_INFO = "info"
+    const val CH_ALARM = "alarm"
 
     const val ID_STATUS = 1
     const val ID_RING = 2
     private const val ID_MISSED = 3
     private const val ID_MESSAGE = 4
+    private const val ID_TAMPER = 5
 
     fun createChannels(c: Context) {
         val nm = c.getSystemService(NotificationManager::class.java)
@@ -48,6 +50,21 @@ object Notifications {
         nm.createNotificationChannel(
             NotificationChannel(CH_INFO, c.getString(R.string.ch_info), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = c.getString(R.string.ch_info_desc)
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_ALARM, c.getString(R.string.ch_alarm), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = c.getString(R.string.ch_alarm_desc)
+                setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400, 200, 400)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
     }
@@ -118,6 +135,50 @@ object Notifications {
             .setContentIntent(open(c, Intent(c, MessagesActivity::class.java), 4))
             .build()
         c.getSystemService(NotificationManager::class.java).notify(ID_MESSAGE, n)
+    }
+
+    /**
+     * Shows the tamper alarm: loud while the station is off the wall or its siren sounds, with
+     * a button that silences the siren, and a quiet note once all is well again. [alert] makes
+     * it sound again, for a new alarm.
+     */
+    fun showTamper(c: Context, t: DoorbellState.Tamper, alert: Boolean) {
+        val nm = c.getSystemService(NotificationManager::class.java)
+        val active = t.open || t.alarm
+        val b = NotificationCompat.Builder(c, if (active) CH_ALARM else CH_INFO)
+            .setSmallIcon(R.drawable.ic_bell)
+            .setContentTitle(c.getString(R.string.alarm_title))
+            .setContentText(tamperText(c, t))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(tamperText(c, t)))
+            .setContentIntent(open(c, Intent(c, MainActivity::class.java), 5))
+            .setOnlyAlertOnce(true)
+        if (active) {
+            b.setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+        } else {
+            b.setAutoCancel(true).setSilent(true)
+        }
+        if (t.alarm) {
+            val stop = PendingIntent.getService(
+                c, 12, DoorbellService.command(c, DoorbellService.ACTION_STOP_ALARM),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            b.addAction(R.drawable.ic_reject, c.getString(R.string.alarm_stop), stop)
+        }
+        if (alert) nm.cancel(ID_TAMPER) // an update would stay silent
+        nm.notify(ID_TAMPER, b.build())
+    }
+
+    fun tamperText(c: Context, t: DoorbellState.Tamper): String {
+        val time = timeText(t.time)
+        return when {
+            t.open && t.alarm -> c.getString(R.string.alarm_open_siren, time)
+            t.open -> c.getString(R.string.alarm_open, time)
+            t.alarm -> c.getString(R.string.alarm_back_siren, time)
+            else -> c.getString(R.string.alarm_back, time)
+        }
     }
 
     fun timeText(seconds: Long): String {

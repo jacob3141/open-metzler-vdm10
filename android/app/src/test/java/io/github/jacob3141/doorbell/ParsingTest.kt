@@ -44,6 +44,7 @@ class ParsingTest {
         assertEquals(HubEvent.RingTaken("ab12", "Pixel"), Rpc.parse("""{"jsonrpc":"2.0","method":"ring.taken","params":{"id":"ab12","by":"Pixel"}}"""))
         assertEquals(HubEvent.RingMissed("ab12"), Rpc.parse("""{"jsonrpc":"2.0","method":"ring.missed","params":{"id":"ab12"}}"""))
         assertEquals(HubEvent.MessageNew("20261121-183000", 5), Rpc.parse("""{"jsonrpc":"2.0","method":"message.new","params":{"id":"20261121-183000","time":5}}"""))
+        assertEquals(HubEvent.Tamper(open = true, alarm = false, time = 9), Rpc.parse("""{"jsonrpc":"2.0","method":"tamper","params":{"open":true,"alarm":false,"time":9}}"""))
         assertEquals(HubEvent.Response(3, true, null), Rpc.parse("""{"jsonrpc":"2.0","id":3,"result":{"video":"/api/video"}}"""))
         assertEquals(HubEvent.Response(4, false, "Ring is no longer active"), Rpc.parse("""{"jsonrpc":"2.0","id":4,"error":{"code":-32000,"message":"Ring is no longer active"}}"""))
         assertEquals(HubEvent.Unknown, Rpc.parse("not json"))

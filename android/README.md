@@ -7,6 +7,7 @@ Client app for the doorbell hub. It only works in the home Wi-Fi, there is no cl
 - **Live view** of the door camera, and the list of **visitor messages**.
 - Sound from the door station plays in the live view and once a ring is answered, not while it rings. Hold "Hold to talk" to talk to the door; the sound of the door is muted meanwhile, so it does not echo.
 - Visitor messages have video and sound.
+- **Tamper alarm:** when someone takes the door station off the wall, the phone sounds an alarm. "Stop alarm" in the notification or in the app silences the siren at the door.
 - English, with a German translation.
 
 ## Installing

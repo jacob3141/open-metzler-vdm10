@@ -8,6 +8,8 @@
     <string name="ch_ring_desc">Rings when someone presses the doorbell.</string>
     <string name="ch_info">Missed rings and messages</string>
     <string name="ch_info_desc">Missed rings and new visitor messages.</string>
+    <string name="ch_alarm">Tamper alarm</string>
+    <string name="ch_alarm_desc">Sounds when someone takes the door station off the wall.</string>
 
     <string name="status_connecting">Connecting to the hub …</string>
     <string name="status_connected">Ready for the doorbell</string>
@@ -26,6 +28,14 @@
     <string name="taken_text">The ring at %1$s was answered by %2$s.</string>
     <string name="message_title">New visitor message</string>
     <string name="message_text">Recorded at %1$s</string>
+
+    <string name="alarm_title">Tamper alarm</string>
+    <string name="alarm_open_siren">The door station was taken off the wall at %1$s. Its siren sounds.</string>
+    <string name="alarm_open">The door station was taken off the wall at %1$s.</string>
+    <string name="alarm_back_siren">The door station was taken off the wall at %1$s and is back now. Its siren still sounds.</string>
+    <string name="alarm_back">The door station was taken off the wall at %1$s and is back now.</string>
+    <string name="alarm_stop">Stop alarm</string>
+    <string name="alarm_stop_failed">The hub cannot be reached, the alarm goes on.</string>
 
     <string name="call_ringing">Someone is at the door</string>
     <string name="call_answering">Answering …</string>

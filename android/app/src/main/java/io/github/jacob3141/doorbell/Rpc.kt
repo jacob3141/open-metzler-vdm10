@@ -8,6 +8,9 @@ sealed class HubEvent {
     data class RingTaken(val id: String, val by: String) : HubEvent()
     data class RingMissed(val id: String) : HubEvent()
     data class MessageNew(val id: String, val time: Long) : HubEvent()
+
+    /** The tamper switch of the door station: [open] while it is off the wall, [alarm] while its siren sounds. */
+    data class Tamper(val open: Boolean, val alarm: Boolean, val time: Long) : HubEvent()
     data class Response(val id: Long, val ok: Boolean, val error: String?) : HubEvent()
     data object Unknown : HubEvent()
 }
@@ -21,6 +24,7 @@ object Rpc {
             "ring.taken" -> HubEvent.RingTaken(p.getString("id"), p.optString("by"))
             "ring.missed" -> HubEvent.RingMissed(p.getString("id"))
             "message.new" -> HubEvent.MessageNew(p.getString("id"), p.optLong("time"))
+            "tamper" -> HubEvent.Tamper(p.getBoolean("open"), p.getBoolean("alarm"), p.optLong("time"))
             "" -> if (m.has("id") && !m.isNull("id")) {
                 val err = m.optJSONObject("error")
                 HubEvent.Response(m.getLong("id"), err == null, err?.optString("message"))

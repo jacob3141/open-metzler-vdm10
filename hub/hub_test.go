@@ -35,6 +35,12 @@ var pcmFrame = bytes.Repeat([]byte{0x10, 0x20}, audioChunkFrames)
 // fakeDoorbell serves frames on /video and /audio and accepts /.
 func fakeDoorbell(t *testing.T) string {
 	t.Helper()
+	return fakeDoorbellRPC(t, nil)
+}
+
+// fakeDoorbellRPC is fakeDoorbell with rpc handling the JSON-RPC connection on /.
+func fakeDoorbellRPC(t *testing.T, rpc func(*ws.Conn)) string {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := ws.Upgrade(w, r, 4096)
 		if err != nil {
@@ -45,6 +51,10 @@ func fakeDoorbell(t *testing.T) string {
 			for c.Write(ws.Binary, pcmFrame) == nil {
 				time.Sleep(10 * time.Millisecond)
 			}
+			return
+		}
+		if r.URL.Path == "/" && rpc != nil {
+			rpc(c)
 			return
 		}
 		if r.URL.Path != "/video" {

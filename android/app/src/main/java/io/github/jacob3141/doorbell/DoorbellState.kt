@@ -11,6 +11,8 @@ object DoorbellState {
 
     data class Ring(val id: String, val time: Long, val state: RingState, val by: String = "")
 
+    data class Tamper(val open: Boolean, val alarm: Boolean, val time: Long)
+
     private val main = Handler(Looper.getMainLooper())
     private val listeners = LinkedHashSet<() -> Unit>()
 
@@ -20,6 +22,12 @@ object DoorbellState {
     /** The current or last ring. */
     var ring: Ring? = null
         private set
+
+    /** What the hub last said about the tamper switch, null while it said nothing. */
+    var tamper: Tamper? = null
+        private set
+
+    fun setTamper(t: Tamper?) = update { tamper = t }
 
     fun setLink(l: Link) = update { link = l }
 

@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.widget.Toast
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -57,6 +58,7 @@ class DoorbellService : Service() {
             ACTION_ACCEPT -> if (ring != null) accept(ring)
             ACTION_REJECT -> if (ring != null) reject(ring)
             ACTION_RECONNECT -> reconnect(now = true)
+            ACTION_STOP_ALARM -> stopAlarm()
             else -> if (socket == null) reconnect(now = true)
         }
         return START_STICKY
@@ -135,7 +137,7 @@ class DoorbellService : Service() {
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             val ev = Rpc.parse(text)
-            if (ev is HubEvent.Ring) wakeBriefly()
+            if (ev is HubEvent.Ring || ev is HubEvent.Tamper) wakeBriefly()
             onMain { handle(ev) }
         }
 
@@ -178,6 +180,7 @@ class DoorbellService : Service() {
             is HubEvent.RingTaken -> endRing(ev.id, DoorbellState.RingState.TAKEN, ev.by)
             is HubEvent.RingMissed -> endRing(ev.id, DoorbellState.RingState.MISSED, "")
             is HubEvent.MessageNew -> Notifications.showMessage(this, ev.time)
+            is HubEvent.Tamper -> tamper(DoorbellState.Tamper(ev.open, ev.alarm, ev.time))
             is HubEvent.Response -> pending.remove(ev.id)?.invoke(ev.ok)
             HubEvent.Unknown -> {}
         }
@@ -200,7 +203,23 @@ class DoorbellService : Service() {
         }
     }
 
-    private fun send(method: String, ring: String, done: (Boolean) -> Unit) {
+    /** A new alarm sounds on the phone; a change of the same alarm only updates the notification. */
+    private fun tamper(t: DoorbellState.Tamper) {
+        val before = DoorbellState.tamper
+        if (t == before) return
+        DoorbellState.setTamper(t)
+        if (before == null && !t.open && !t.alarm) return
+        val alert = (t.open && before?.open != true) || (t.alarm && before?.alarm != true)
+        Notifications.showTamper(this, t, alert)
+    }
+
+    private fun stopAlarm() {
+        send("alarm.stop", null) { ok ->
+            if (!ok) Toast.makeText(this, R.string.alarm_stop_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun send(method: String, ring: String?, done: (Boolean) -> Unit) {
         val ws = socket
         if (ws == null || DoorbellState.link != DoorbellState.Link.CONNECTED) {
             done(false)
@@ -252,6 +271,7 @@ class DoorbellService : Service() {
         const val ACTION_ACCEPT = "io.github.jacob3141.doorbell.ACCEPT"
         const val ACTION_REJECT = "io.github.jacob3141.doorbell.REJECT"
         const val ACTION_RECONNECT = "io.github.jacob3141.doorbell.RECONNECT"
+        const val ACTION_STOP_ALARM = "io.github.jacob3141.doorbell.STOP_ALARM"
         const val EXTRA_RING = "ring"
 
         fun command(c: Context, action: String, ring: String? = null): Intent =

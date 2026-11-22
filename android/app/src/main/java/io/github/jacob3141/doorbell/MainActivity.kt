@@ -27,6 +27,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var permNotify: View
     private lateinit var permFullScreen: View
     private lateinit var permBattery: View
+    private lateinit var alarm: View
+    private lateinit var alarmText: TextView
+    private lateinit var alarmStop: Button
     private val onState = { render() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +47,10 @@ class MainActivity : AppCompatActivity() {
         permNotify = findViewById(R.id.perm_notify)
         permFullScreen = findViewById(R.id.perm_fullscreen)
         permBattery = findViewById(R.id.perm_battery)
+        alarm = findViewById(R.id.main_alarm)
+        alarmText = findViewById(R.id.main_alarm_text)
+        alarmStop = findViewById(R.id.main_alarm_stop)
+        alarmStop.setOnClickListener { startService(DoorbellService.command(this, DoorbellService.ACTION_STOP_ALARM)) }
 
         findViewById<Button>(R.id.main_live).setOnClickListener { startActivity(CallActivity.liveIntent(this)) }
         findViewById<Button>(R.id.main_messages).setOnClickListener { startActivity(Intent(this, MessagesActivity::class.java)) }
@@ -107,6 +114,12 @@ class MainActivity : AppCompatActivity() {
             else -> View.GONE
         }
         retry.setText(if (DoorbellState.link == DoorbellState.Link.NOT_PAIRED) R.string.pair_again else R.string.retry)
+
+        // The tamper alarm stays on screen while the station is off the wall or its siren sounds.
+        val t = DoorbellState.tamper
+        alarm.visibility = if (t != null && (t.open || t.alarm)) View.VISIBLE else View.GONE
+        if (t != null) alarmText.text = Notifications.tamperText(this, t)
+        alarmStop.visibility = if (t?.alarm == true) View.VISIBLE else View.GONE
     }
 
     private fun renderPermissions() {

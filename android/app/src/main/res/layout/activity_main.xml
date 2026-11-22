@@ -31,6 +31,31 @@
             android:text="@string/retry"
             android:visibility="gone" />
 
+        <LinearLayout
+            android:id="@+id/main_alarm"
+            style="@style/Doorbell.Card"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/alarm_title"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="@color/bad" />
+
+            <TextView
+                android:id="@+id/main_alarm_text"
+                style="@style/Doorbell.CardText"
+                android:layout_marginTop="4dp" />
+
+            <Button
+                android:id="@+id/main_alarm_stop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/bad"
+                android:text="@string/alarm_stop" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/main_live"
             android:layout_width="match_parent"
