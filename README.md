@@ -5,30 +5,32 @@
 Local software for the Metzler VDM10-VM-POE video door station. It needs no cloud service.
 
 ```mermaid
-flowchart LR
-  subgraph door["Door station (VDM10)"]
-    direction TB
-    hw["Camera · Microphone · Speaker<br/>Bell button (GPIO4_0)"]
-    mediad["mediad<br/>H.264 video, PCM sound"]
-    doorbelld["doorbelld<br/>WebSocket server :8080"]
-    hw <--> mediad
-    hw -- button --> doorbelld
-    mediad <-- "stdin / stdout" --> doorbelld
-  end
+flowchart TB
+  app["Android app<br/>ringing, live view, hold to talk"]
+  browser["Web browser<br/>admin page, live view"]
 
-  subgraph router["Home server (Docker)"]
+  subgraph server["Home server (Docker)"]
+    direction LR
     hub["doorbell-hub :80<br/>rings · live view · talk<br/>clients · visitor messages"]
-    data[("/data<br/>clients, settings,<br/>messages")]
+    data[("/data<br/>clients, settings, messages")]
     hub --- data
   end
 
-  app["Android app<br/>ringing, live view,<br/>hold to talk"]
-  browser["Web browser<br/>admin page, live view"]
+  subgraph door["Door station (VDM10)"]
+    direction LR
+    doorbelld["doorbelld<br/>WebSocket server :8080"]
+    mediad["mediad<br/>H.264 video, PCM sound"]
+    hw["Camera · Microphone · Speaker<br/>Bell button (GPIO4_0)"]
+    doorbelld <-- "stdin / stdout" --> mediad
+    mediad <--> hw
+    hw -- button --> doorbelld
+  end
 
-  doorbelld <-- "JSON-RPC, video,<br/>sound, talk" --> hub
-  hub <-- "ws /api/* (token),<br/>mDNS, /app.apk" --> app
-  hub -- "HTTP /" --> browser
+  app <-- "ws /api/* (token), mDNS, /app.apk" --> hub
+  browser <-- "HTTP" --> hub
+  hub <-- "JSON-RPC, video, sound, talk" --> doorbelld
 ```
+
 
 The door station only talks to the hub, and phones and browsers only talk to the hub. A ring goes from the button through `doorbelld` to the hub, which rings every connected app; if nobody answers, the hub records a visitor message.
 
