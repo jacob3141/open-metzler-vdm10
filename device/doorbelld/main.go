@@ -434,15 +434,10 @@ func (h *hub) watchButton(gpio string) {
 		os.WriteFile("/sys/class/gpio/export", []byte(gpio), 0)
 		os.WriteFile(dir+"/direction", []byte("in"), 0)
 	}
-	t := time.NewTicker(25 * time.Millisecond) // a press lasts far longer
-	h.pollButton(dir+"/value", t.C)
-}
-
-// pollButton reports a press once the button reads high twice in a row, and the next one
-// only after it read low twice in a row. It reads once per tick and ends when tick closes.
-func (h *hub) pollButton(path string, tick <-chan time.Time) {
-	pressed, same, failed := false, 0, false
-	for range tick {
+	path := dir + "/value"
+	var btn debounce
+	failed := false
+	for range time.Tick(25 * time.Millisecond) { // a press lasts far longer
 		b, err := os.ReadFile(path)
 		if err != nil {
 			if !failed {
@@ -452,16 +447,7 @@ func (h *hub) pollButton(path string, tick <-chan time.Time) {
 			continue
 		}
 		failed = false
-		high := len(b) > 0 && b[0] == '1'
-		if high == pressed {
-			same = 0
-			continue
-		}
-		if same++; same < 2 {
-			continue
-		}
-		pressed, same = high, 0
-		if pressed {
+		if btn.update(len(b) > 0 && b[0] == '1') {
 			log.Print("button pressed")
 			h.broadcast(encode(map[string]any{
 				"jsonrpc": "2.0",
@@ -470,6 +456,26 @@ func (h *hub) pollButton(path string, tick <-chan time.Time) {
 			}))
 		}
 	}
+}
+
+// debounce reports a press once the button reads high twice in a row, and the next one
+// only after it read low twice in a row.
+type debounce struct {
+	pressed bool
+	same    int
+}
+
+// update takes one reading and returns true when the button counts as newly pressed.
+func (d *debounce) update(high bool) bool {
+	if high == d.pressed {
+		d.same = 0
+		return false
+	}
+	if d.same++; d.same < 2 {
+		return false
+	}
+	d.pressed, d.same = high, 0
+	return d.pressed
 }
 
 // runMedia starts mediad, hands its frames to the clients of /video and /audio, and feeds it
