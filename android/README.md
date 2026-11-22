@@ -13,7 +13,7 @@ Client app for the doorbell hub. It only works in the home Wi-Fi, there is no cl
 
 Open the web interface of the hub and scan the QR code under "Android app" with the phone, or open `http://doorbell-hub.home.arpa/app.apk` on it. The first time, Android asks to allow installing apps from the browser. For an update, open the link again: the app stays paired.
 
-GitHub Actions builds the app with every push and puts it into the Docker image of the hub, signed with the release key from the secrets `DOORBELL_KEYSTORE_B64` (the keystore in base64, alias `doorbell`) and `DOORBELL_KEYSTORE_PASSWORD`. Android only updates an app signed with the same key, so keep the key: with a new one the app has to be uninstalled and paired again.
+GitHub Actions builds the app with every push and puts it into the Docker image of the hub; releases have it too (see [Releases](../README.md#releases)). It is signed with the release key from the secrets `DOORBELL_KEYSTORE_B64` (the keystore in base64, alias `doorbell`) and `DOORBELL_KEYSTORE_PASSWORD`. Android only updates an app signed with the same key, so keep the key: with a new one the app has to be uninstalled and paired again.
 
 Android 10 (API 29) or newer. On Android 14 and newer, allow full-screen notifications when the app asks, otherwise a ring on a locked phone only shows a notification. Exempt the app from battery optimization so that it stays connected.
 

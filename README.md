@@ -4,6 +4,34 @@
 
 Local software for the Metzler VDM10-VM-POE video door station. It needs no cloud service.
 
+```mermaid
+flowchart LR
+  subgraph door["Door station (VDM10)"]
+    direction TB
+    hw["Camera · Microphone · Speaker<br/>Bell button (GPIO4_0)"]
+    mediad["mediad<br/>H.264 video, PCM sound"]
+    doorbelld["doorbelld<br/>WebSocket server :8080"]
+    hw <--> mediad
+    hw -- button --> doorbelld
+    mediad <-- "stdin / stdout" --> doorbelld
+  end
+
+  subgraph router["Home server (Docker)"]
+    hub["doorbell-hub :80<br/>rings · live view · talk<br/>clients · visitor messages"]
+    data[("/data<br/>clients, settings,<br/>messages")]
+    hub --- data
+  end
+
+  app["Android app<br/>ringing, live view,<br/>hold to talk"]
+  browser["Web browser<br/>admin page, live view"]
+
+  doorbelld <-- "JSON-RPC, video,<br/>sound, talk" --> hub
+  hub <-- "ws /api/* (token),<br/>mDNS, /app.apk" --> app
+  hub -- "HTTP /" --> browser
+```
+
+The door station only talks to the hub, and phones and browsers only talk to the hub. A ring goes from the button through `doorbelld` to the hub, which rings every connected app; if nobody answers, the hub records a visitor message.
+
 ## Components
 
 | Path | Purpose |
@@ -63,6 +91,25 @@ Then send `Authorization: Bearer <token>` with every request.
 `GET /app.apk` downloads the Android app, without a token: the hub has it when CI built its Docker image (`HUB_APP`, default `/app/doorbell.apk`).
 
 The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}` and `message.new {id, time}`. Clients call `ring.accept {id}`, `ring.reject {id}` and `system.ping`.
+
+## Releases
+
+Push a tag to release the commit it points to:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The `Release` workflow tests the hub, `doorbelld` and the app, then publishes a [GitHub release](https://github.com/jacob3141/open-metzler-vdm10/releases) with:
+
+- `doorbell-<tag>.apk`: the Android app, signed with the release key,
+- `doorbelld-<tag>-linux-armv5`: `doorbelld` for the door station,
+- `SHA256SUMS`.
+
+It also pushes the hub image as `ghcr.io/jacob3141/doorbell-hub:<version>` and `:latest`. `mediad` is not part of a release, because it links against libraries from the door station (see [Building](#building)).
+
+Between releases, every push to `main` builds `ghcr.io/jacob3141/doorbell-hub:latest` with the current app inside. The app's version code is the number of commits, so a phone takes every newer build as an update, from the hub or from a release.
 
 ## License
 

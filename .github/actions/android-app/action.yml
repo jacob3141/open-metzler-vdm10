@@ -1,0 +1,40 @@
+name: Android app
+description: Tests and builds the signed release APK and puts it where the hub image picks it up (hub/app/doorbell.apk).
+
+inputs:
+  keystore-b64:
+    description: The release keystore in base64 (alias doorbell)
+    required: true
+  keystore-password:
+    description: Password of the keystore and the key
+    required: true
+  version-name:
+    description: Version shown in Android
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    # The version code is the number of commits on the branch. It only grows, so a phone
+    # takes every newer app from the hub or a release as an update. Needs fetch-depth: 0.
+    - name: Build the Android app
+      shell: bash
+      working-directory: android
+      env:
+        DOORBELL_KEYSTORE: ${{ runner.temp }}/doorbell-release.jks
+        DOORBELL_KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        DOORBELL_KEYSTORE_B64: ${{ inputs.keystore-b64 }}
+        DOORBELL_VERSION_NAME: ${{ inputs.version-name }}
+      run: |
+        export DOORBELL_VERSION_CODE=$(git rev-list --count HEAD)
+        echo "$DOORBELL_KEYSTORE_B64" | base64 -d > "$DOORBELL_KEYSTORE"
+        trap 'rm -f "$DOORBELL_KEYSTORE"' EXIT
+        chmod +x gradlew
+        ./gradlew --no-daemon testReleaseUnitTest assembleRelease
+        cp app/build/outputs/apk/release/app-release.apk ../hub/app/doorbell.apk
+        echo "Built version $DOORBELL_VERSION_NAME ($DOORBELL_VERSION_CODE)"

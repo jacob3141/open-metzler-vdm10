@@ -11,9 +11,10 @@ android {
         applicationId = "io.github.jacob3141.doorbell"
         minSdk = 29
         targetSdk = 35
-        // CI counts up, so the phone takes each app from the hub as an update
+        // CI sets these: the commit count, so the phone takes each newer app as an update, and the
+        // tag (releases) or git describe (builds of main)
         versionCode = System.getenv("DOORBELL_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = "0.1.0"
+        versionName = System.getenv("DOORBELL_VERSION_NAME") ?: "dev"
     }
 
     // The release key lives outside the repository (a GitHub secret in CI). Without it the
