@@ -19,7 +19,7 @@ Local software for the Metzler VDM10-VM-POE video door station. It needs no clou
 
 ## Status
 
-Video and the button event work. Audio does not work yet, so visitor messages are silent. The Docker image has not been built yet.
+Video and the button event work. Microphone and speaker work on the device (see `device/mediad/atest.c`), but audio is not yet part of `mediad`, so visitor messages are still silent.
 
 `doorbelld` has no authentication, so keep the door station on a trusted network. The client API requires per-client tokens. The admin interface is protected by `HUB_ADMIN_PASSWORD`; if it is empty, anyone on the network can open it.
 
@@ -394,9 +394,19 @@ Treat physical access as equivalent to root access.
 
 ## Known limitations
 
-- **Audio not working.** The MPP audio pipeline initialises successfully, but the
-  microphone captures only noise.  The FM2018 codec (I2C) and the analog path are
-  not initialised.  This is a known open issue.
+- **Audio not in the stream yet.** Microphone and speaker work, but `mediad` does not
+  capture or play audio yet.  What is known about the audio path:
+  - The FM2018 echo canceller (I2C) is set up by `DDM.ko` at boot with the register
+    list for board DS17040.  `echo p > /proc/OSAL/fm2018_0` prints its registers to
+    `dmesg`, `r <reg>` and `w <reg> <val>` read and write single ones.
+  - The amplifier is switched on with ioctl `0x401c5308` on `/dev/DDM/sound` (off:
+    `0x401c5307`).
+  - The inner codec needs input `ACODEC_MIXER_IN1`, and AI/AO need `u32ClkSel = 0`.
+    With `u32ClkSel = 1` the microphone delivers only silence.
+  - The FM2018 removes what the speaker plays from the microphone signal, so a
+    loopback test cannot detect its own tone.
+  - `atest` (`SHARED=1 CLKSEL=0 MIXER=1 REC=/tmp/mic.raw ./atest`) plays a tone and
+    records the microphone next to the running `mediad`.
 - **Long cable.** On a cable run longer than roughly 5 m the PHY (RTL8201F) fails
   to complete autonegotiation and loses the link after a few seconds.  10 Mbit/s
   half-duplex gives a link but almost no receive traffic.  Check connectors,

@@ -1,4 +1,6 @@
 // Audio self-test: record the microphone, play a 1 kHz tone, measure level and tone energy.
+// Works on the door station with CLKSEL=0 MIXER=1. SHARED=1 runs it next to mediad.
+// Settings by environment: CHNS, CLKSEL, MIXER, VOL, FRAMES, TONE=0, REC=<file of raw samples>.
 #include <fcntl.h>
 #include <math.h>
 #include <stdio.h>
@@ -74,23 +76,33 @@ int main(void)
 	AI_CHN_PARAM_S p;
 	AUDIO_FRAME_S out;
 	double phase = 0;
-	int i;
+	int i, c, shared = getenv("SHARED") != NULL;
+	int chns = getenv("CHNS") ? atoi(getenv("CHNS")) : 1; // AI channels, each is measured
+	int clksel = getenv("CLKSEL") ? atoi(getenv("CLKSEL")) : 1;
+	int frames = getenv("FRAMES") ? atoi(getenv("FRAMES")) : 250;
+	int tone_on = getenv("TONE") ? atoi(getenv("TONE")) : 1;
+	int rec = getenv("REC") ? open(getenv("REC"), O_WRONLY | O_CREAT | O_TRUNC, 0644) : -1; // raw 16-bit samples of channel 0
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	HI_MPI_AO_DisableChn(0, 0);
 	HI_MPI_AO_Disable(0);
-	HI_MPI_AI_DisableChn(0, 0);
-	HI_MPI_AI_Disable(0);
-	HI_MPI_SYS_Exit();
-	HI_MPI_VB_Exit();
-	memset(&vb, 0, sizeof(vb));
-	vb.u32MaxPoolCnt = 16;
-	CHK(HI_MPI_VB_SetConf(&vb));
-	CHK(HI_MPI_VB_Init());
-	memset(&sys, 0, sizeof(sys));
-	sys.u32AlignWidth = 64;
-	CHK(HI_MPI_SYS_SetConf(&sys));
-	CHK(HI_MPI_SYS_Init());
+	for (c = 0; c < 2; c++) { /* a test that crashed may have left channels enabled */
+		printf("AI_EnableChn %d 0x%x\n", c, HI_MPI_AI_EnableChn(0, c));
+		printf("AI_DisableChn %d 0x%x\n", c, HI_MPI_AI_DisableChn(0, c));
+	}
+	printf("AI_Disable 0x%x\n", HI_MPI_AI_Disable(0));
+	if (!shared) { // with SHARED=1 the MPP system of the running mediad is used, its video keeps running
+		HI_MPI_SYS_Exit();
+		HI_MPI_VB_Exit();
+		memset(&vb, 0, sizeof(vb));
+		vb.u32MaxPoolCnt = 16;
+		CHK(HI_MPI_VB_SetConf(&vb));
+		CHK(HI_MPI_VB_Init());
+		memset(&sys, 0, sizeof(sys));
+		sys.u32AlignWidth = 64;
+		CHK(HI_MPI_SYS_SetConf(&sys));
+		CHK(HI_MPI_SYS_Init());
+	}
 	setup_codec();
 
 	memset(&a, 0, sizeof(a));
@@ -100,14 +112,17 @@ int main(void)
 	a.enSoundmode = AUDIO_SOUND_MODE_MONO;
 	a.u32FrmNum = 30;
 	a.u32PtNumPerFrm = PTS;
-	a.u32ChnCnt = 1;
-	a.u32ClkSel = 1;
+	a.u32ChnCnt = chns;
+	a.u32ClkSel = clksel;
 	CHK(HI_MPI_AI_SetPubAttr(0, &a));
 	CHK(HI_MPI_AI_Enable(0));
-	CHK(HI_MPI_AI_EnableChn(0, 0));
-	memset(&p, 0, sizeof(p));
-	p.u32UsrFrmDepth = 30;
-	CHK(HI_MPI_AI_SetChnParam(0, 0, &p));
+	for (c = 0; c < chns; c++) {
+		CHK(HI_MPI_AI_EnableChn(0, c));
+		memset(&p, 0, sizeof(p));
+		p.u32UsrFrmDepth = 30;
+		CHK(HI_MPI_AI_SetChnParam(0, c, &p));
+	}
+	a.u32ChnCnt = 1;
 	CHK(HI_MPI_AO_SetPubAttr(0, &a));
 	CHK(HI_MPI_AO_Enable(0));
 	CHK(HI_MPI_AO_EnableChn(0, 0));
@@ -118,11 +133,11 @@ int main(void)
 	out.pVirAddr[0] = tone;
 	out.u32Len = sizeof(tone);
 
-	printf("Frame  Phase    RMS   1kHz\n");
-	for (i = 0; i < 250; i++) {
+	printf("Frame  Phase  Chn    RMS   1kHz\n");
+	for (i = 0; i < frames; i++) {
 		AUDIO_FRAME_S in;
 		AEC_FRAME_S aec;
-		int playing = i >= 75 && i < 175, j;
+		int playing = tone_on && i >= frames * 3 / 10 && i < frames * 7 / 10, j;
 		HI_S32 r;
 
 		for (j = 0; j < PTS; j++) {
@@ -132,26 +147,35 @@ int main(void)
 		r = HI_MPI_AO_SendFrame(0, 0, &out, 1000);
 		if (r != HI_SUCCESS)
 			printf("AO_SendFrame 0x%x\n", r);
-		r = HI_MPI_AI_GetFrame(0, 0, &in, &aec, 1000);
-		if (r != HI_SUCCESS) {
-			printf("AI_GetFrame 0x%x\n", r);
-			continue;
+		for (c = 0; c < chns; c++) {
+			r = HI_MPI_AI_GetFrame(0, c, &in, &aec, 1000);
+			if (r != HI_SUCCESS) {
+				printf("AI_GetFrame %d 0x%x\n", c, r);
+				continue;
+			}
+			if (rec >= 0 && c == 0 && write(rec, in.pVirAddr[0], in.u32Len) < 0)
+				perror("rec");
+			if (i % 25 == 24) {
+				const short *s = in.pVirAddr[0];
+				int n = in.u32Len / 2;
+				double sum = 0;
+				for (j = 0; j < n; j++)
+					sum += (double)s[j] * s[j];
+				printf("%5d  %-5s  %3d  %6.0f  %5.0f\n", i, playing ? "TONE" : "quiet", c, sqrt(sum / n), goertzel(s, n, 1000));
+			}
+			HI_MPI_AI_ReleaseFrame(0, c, &in, &aec);
 		}
-		if (i % 25 == 24) {
-			const short *s = in.pVirAddr[0];
-			int n = in.u32Len / 2;
-			double sum = 0;
-			for (j = 0; j < n; j++)
-				sum += (double)s[j] * s[j];
-			printf("%5d  %-5s  %6.0f  %5.0f\n", i, playing ? "TONE" : "quiet", sqrt(sum / n), goertzel(s, n, 1000));
-		}
-		HI_MPI_AI_ReleaseFrame(0, 0, &in, &aec);
 	}
 	HI_MPI_AO_DisableChn(0, 0);
 	HI_MPI_AO_Disable(0);
-	HI_MPI_AI_DisableChn(0, 0);
+	if (rec >= 0)
+		close(rec);
+	for (c = 0; c < chns; c++)
+		HI_MPI_AI_DisableChn(0, c);
 	HI_MPI_AI_Disable(0);
-	HI_MPI_SYS_Exit();
-	HI_MPI_VB_Exit();
+	if (!shared) {
+		HI_MPI_SYS_Exit();
+		HI_MPI_VB_Exit();
+	}
 	return 0;
 }
