@@ -31,7 +31,7 @@ cp .env.example .env   # then fill in the values
 docker compose up -d --build
 ```
 
-The web interface is on port 8088. If `HUB_ADMIN_PASSWORD` is set, log in with any user name and that password.
+The web interface is on port 80 (`HUB_LISTEN`, default `:80`), e.g. `http://doorbell-hub.home.arpa`. If `HUB_ADMIN_PASSWORD` is set, log in with any user name and that password.
 
 It has a live view of the door camera. The hub sends the video as fragmented MP4 from `GET /admin/live`, and the page plays it with Media Source Extensions (`ManagedMediaSource` on iOS 17.1 and later). This works over plain HTTP. The hub connects to the door station video only while someone is watching or a message is being recorded.
 

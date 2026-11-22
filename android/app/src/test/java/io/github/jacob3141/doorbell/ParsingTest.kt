@@ -62,17 +62,17 @@ class ParsingTest {
 
     @Test
     fun normalizesHubAddresses() {
-        assertEquals("http://doorbell-hub.home.arpa:8088", HubAddress.normalize("doorbell-hub.home.arpa"))
+        assertEquals("http://doorbell-hub.home.arpa", HubAddress.normalize("doorbell-hub.home.arpa"))
         assertEquals("http://10.0.3.10:9000", HubAddress.normalize(" http://10.0.3.10:9000/ "))
-        assertEquals("http://hub.home.arpa:8088", HubAddress.normalize("hub.home.arpa"))
-        assertEquals("http://[fd4a::1]:8088", HubAddress.normalize("[fd4a::1]"))
-        assertEquals("http://[fd4a::1]:80", HubAddress.normalize("[fd4a::1]:80"))
+        assertEquals("http://hub.home.arpa:8088", HubAddress.normalize("hub.home.arpa:8088"))
+        assertEquals("http://[fd4a::1]", HubAddress.normalize("[fd4a::1]"))
+        assertEquals("http://[fd4a::1]", HubAddress.normalize("[fd4a::1]:80"))
         assertNull(HubAddress.normalize(""))
         assertNull(HubAddress.normalize("https://hub"))
         assertNull(HubAddress.normalize("hub/admin"))
         assertNull(HubAddress.normalize("hub:99999"))
         assertNull(HubAddress.normalize("user@hub"))
-        assertEquals("ws://10.0.3.10:8088/api/events", HubAddress.ws("http://10.0.3.10:8088", "/api/events"))
+        assertEquals("ws://doorbell-hub.home.arpa/api/events", HubAddress.ws("http://doorbell-hub.home.arpa", "/api/events"))
     }
 
     @Test

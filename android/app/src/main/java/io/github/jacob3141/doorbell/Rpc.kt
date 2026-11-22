@@ -40,9 +40,9 @@ object Rpc {
     }
 }
 
-/** Turns what the user typed into the base URL of the hub, e.g. "doorbell-hub.home.arpa" → "http://doorbell-hub.home.arpa:8088". */
+/** Turns what the user typed into the base URL of the hub, e.g. "doorbell-hub.home.arpa" → "http://doorbell-hub.home.arpa". */
 object HubAddress {
-    const val DEFAULT_PORT = 8088
+    const val DEFAULT_PORT = 80
 
     fun normalize(input: String): String? {
         var s = input.trim().trimEnd('/')
@@ -68,7 +68,7 @@ object HubAddress {
             port = DEFAULT_PORT
         }
         if (host.isEmpty() || port !in 1..65535) return null
-        return "http://$host:$port"
+        return if (port == DEFAULT_PORT) "http://$host" else "http://$host:$port"
     }
 
     fun ws(base: String, path: String): String = "ws" + base.removePrefix("http") + path

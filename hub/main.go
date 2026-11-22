@@ -25,7 +25,7 @@ func envSeconds(name string, def int) time.Duration {
 
 func main() {
 	cfg := Config{
-		Listen:        env("HUB_LISTEN", ":8088"),
+		Listen:        env("HUB_LISTEN", ":80"),
 		Doorbell:      env("HUB_DOORBELL", "doorbell.home.arpa:8080"),
 		Data:          env("HUB_DATA", "/data"),
 		AdminPassword: os.Getenv("HUB_ADMIN_PASSWORD"),

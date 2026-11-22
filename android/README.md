@@ -2,7 +2,7 @@
 
 Client app for the doorbell hub. It only works in the home Wi-Fi, there is no cloud service.
 
-- **Pairing:** the app finds the hub in the Wi-Fi by mDNS (or you type its name, e.g. `doorbell-hub.home.arpa`; the port 8088 is the default) and asks for access. Approve the phone in the web interface of the hub under "Devices asking for access" if the code is the same as on the phone. Alternatively, enter the token of a client created in the web interface.
+- **Pairing:** the app finds the hub in the Wi-Fi by mDNS (or you type its name, e.g. `doorbell-hub.home.arpa`; the port 80 is the default) and asks for access. Approve the phone in the web interface of the hub under "Devices asking for access" if the code is the same as on the phone. Alternatively, enter the token of a client created in the web interface.
 - **Ringing:** a foreground service keeps the connection to the hub while the phone is in Wi-Fi. A ring shows the door camera in full screen, also on the lock screen, and rings like a phone call. "Answer" tells the hub that someone takes care of it, "Decline" lets the hub record a visitor message once everyone declined.
 - **Live view** of the door camera, and the list of **visitor messages**.
 - Sound from the door station plays in the live view and once a ring is answered, not while it rings. Hold "Hold to talk" to talk to the door; the sound of the door is muted meanwhile, so it does not echo.
@@ -11,7 +11,7 @@ Client app for the doorbell hub. It only works in the home Wi-Fi, there is no cl
 
 ## Installing
 
-Open the web interface of the hub and scan the QR code under "Android app" with the phone, or open `http://doorbell-hub.home.arpa:8088/app.apk` on it. The first time, Android asks to allow installing apps from the browser. For an update, open the link again: the app stays paired.
+Open the web interface of the hub and scan the QR code under "Android app" with the phone, or open `http://doorbell-hub.home.arpa/app.apk` on it. The first time, Android asks to allow installing apps from the browser. For an update, open the link again: the app stays paired.
 
 GitHub Actions builds the app with every push and puts it into the Docker image of the hub, signed with the release key from the secrets `DOORBELL_KEYSTORE_B64` (the keystore in base64, alias `doorbell`) and `DOORBELL_KEYSTORE_PASSWORD`. Android only updates an app signed with the same key, so keep the key: with a new one the app has to be uninstalled and paired again.
 
