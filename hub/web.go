@@ -44,6 +44,8 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/messages/{id}/delete", h.admin(h.deleteMessage))
 	mux.HandleFunc("POST /admin/settings", h.admin(h.saveSettings))
 	mux.HandleFunc("POST /admin/alarm/stop", h.admin(h.stopAlarm))
+	mux.HandleFunc("POST /admin/mount", h.admin(h.setMount))
+	mux.HandleFunc("GET /admin/tamper", h.admin(h.tamperJSON))
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
 	mux.HandleFunc("GET /admin/live", h.admin(h.live))
 	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))

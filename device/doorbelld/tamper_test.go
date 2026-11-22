@@ -28,8 +28,10 @@ func (l *lockedBuffer) Len() int {
 }
 
 type tamperParams struct {
-	Open  bool `json:"open"`
-	Alarm bool `json:"alarm"`
+	Open    bool `json:"open"`
+	Alarm   bool `json:"alarm"`
+	Pressed bool `json:"pressed"`
+	Mount   bool `json:"mount"`
 }
 
 // nextTamper waits for the next "tamper" notification to the client.
@@ -141,5 +143,67 @@ func TestSirenToneIsLoudAndSweeps(t *testing.T) {
 	}
 	if high, _ := crossings(); high < low*3/2 {
 		t.Fatalf("pitch does not rise: %d then %d crossings", low, high)
+	}
+}
+
+// In the mounting mode the switch is shown live, but the siren stays quiet.
+func TestMountingModeKeepsTheSirenQuiet(t *testing.T) {
+	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
+	c := &client{out: make(chan []byte, 16)}
+	h.add(c)
+
+	h.startSiren(time.Hour)
+	nextTamper(t, c)
+	if r := h.dispatch([]byte(`{"jsonrpc":"2.0","id":1,"method":"mount.set","params":{"on":true}}`)); !bytes.Contains(r, []byte(`"result":true`)) {
+		t.Fatalf("mount.set: %s", r)
+	}
+	if p := nextTamper(t, c); p.Alarm { // the mounting mode silences a siren that sounds
+		t.Fatalf("after mount.set %+v", p)
+	}
+	if p := nextTamper(t, c); !p.Mount {
+		t.Fatalf("mounting mode not reported: %+v", p)
+	}
+
+	var sw debounce
+	pressed := tamperOpenWhenPressed // the reading that means "off the wall"
+	h.tamperReading(&sw, pressed, time.Hour)
+	h.tamperReading(&sw, pressed, time.Hour)
+	if p := nextTamper(t, c); !p.Open || p.Pressed != pressed || !p.Mount || p.Alarm {
+		t.Fatalf("switch in the mounting mode: %+v", p)
+	}
+	if h.sirenActive() {
+		t.Fatal("the siren sounds in the mounting mode")
+	}
+
+	h.dispatch([]byte(`{"jsonrpc":"2.0","id":2,"method":"mount.set","params":{"on":false}}`))
+	if p := nextTamper(t, c); p.Mount {
+		t.Fatalf("mounting mode still on: %+v", p)
+	}
+	h.tamperReading(&sw, !pressed, time.Hour)
+	h.tamperReading(&sw, !pressed, time.Hour)
+	nextTamper(t, c)
+	h.tamperReading(&sw, pressed, time.Hour)
+	h.tamperReading(&sw, pressed, time.Hour)
+	nextTamper(t, c)
+	if !h.sirenActive() {
+		t.Fatal("no siren after the mounting mode")
+	}
+	h.stopSiren()
+
+	if r := h.dispatch([]byte(`{"jsonrpc":"2.0","id":3,"method":"mount.set","params":"x"}`)); !bytes.Contains(r, []byte(`-32602`)) {
+		t.Fatalf("bad params: %s", r)
+	}
+}
+
+func TestMountingModeEndsByItself(t *testing.T) {
+	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
+	c := &client{out: make(chan []byte, 16)}
+	h.add(c)
+	h.setMount(true, 50*time.Millisecond)
+	if p := nextTamper(t, c); !p.Mount {
+		t.Fatalf("%+v", p)
+	}
+	if p := nextTamper(t, c); p.Mount {
+		t.Fatalf("still mounting: %+v", p)
 	}
 }

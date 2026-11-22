@@ -51,7 +51,7 @@ The door station only talks to the hub, and phones and browsers only talk to the
 
 Video, microphone, speaker and the button event work: the app shows and plays the door, you talk to the door while holding a button, visitor messages have sound. The live view of the web interface plays the sound too.
 
-Tamper alarm: when someone takes the door station off the wall, its own siren sounds for 30 seconds (also without the hub), the hub records a clip like a visitor message, and the app raises an alarm with a button that stops the siren. The admin page can stop it too.
+Tamper alarm: when someone takes the door station off the wall, its own siren sounds for 30 seconds (also without the hub), the hub records a clip like a visitor message, and the app raises an alarm with a button that stops the siren. The admin page can stop it too. Before taking the station off the wall or mounting it, turn on the mounting mode on the admin page: it keeps the siren quiet for 30 minutes and shows the switch live.
 
 `doorbelld` has no authentication, so keep the door station on a trusted network. The client API requires per-client tokens. The admin interface is protected by `HUB_ADMIN_PASSWORD`; if it is empty, anyone on the network can open it.
 
@@ -470,15 +470,19 @@ Treat physical access as equivalent to root access.
   pressed.  The device tree declares a `gpio-keys` button on GPIO4_3 (`/dev/event0`,
   code 5), but that pin never changes on this board, so `doorbelld` polls GPIO 32
   every 25 ms instead (`-button`).
-- **Tamper switch.** A switch on the back is pressed while the station is mounted.
-  The vendor driver `DDM` reads it (GPIO7_4); like the original `hicore`, `doorbelld`
-  asks it with the ioctl `DDM_IOC_DOOR_TAMPER` (`0x40044204`) on `/dev/DDM/alarmV2`,
-  which gives 1 while pressed and 0 when the station is off the wall.  `doorbelld`
-  reports every change as the notification `tamper {open, alarm, time}`, sends it to
-  each new RPC client, and plays a siren through the speaker for `-siren` (default
-  30 s; talk is muted meanwhile) when the switch opens.  `alarm.stop` silences it,
-  `tamper.state` returns the state.  The state at start counts as normal, so a station
-  that boots on the bench stays quiet.
+- **Tamper switch.** A switch on the back should be pressed while the station is
+  mounted.  The vendor driver `DDM` reads it (GPIO7_4); like the original `hicore`,
+  `doorbelld` asks it with the ioctl `DDM_IOC_DOOR_TAMPER` (`0x40044204`) on
+  `/dev/DDM/alarmV2`, which gives 0 while the switch is pressed and 1 while it is free.
+  `doorbelld` reports every change as the notification
+  `tamper {open, alarm, pressed, mount, time}`, sends it to each new RPC client, and
+  plays a siren through the speaker for `-siren` (default 30 s; talk is muted meanwhile)
+  when the station comes off the wall.  `alarm.stop` silences it, `tamper.state` returns
+  the state, `mount.set {on}` turns the mounting mode on for 30 minutes (no siren) or
+  off.  The state at start counts as normal, so a station that boots on the bench stays
+  quiet.  Which state of the switch means "off the wall" is the constant
+  `tamperOpenWhenPressed`: on the first station the mounting did not press the switch,
+  so for now a *pressed* switch raises the alarm; this is to be checked.
 - **Audio levels.** `mediad` sets the microphone gain to 30 (`MEDIAD_MIC_VOL`, range
   -78..80; at 60 the street noise alone was at -25 dBFS and voices clipped) and the
   speaker to 0 dB (`MEDIAD_SPEAKER_VOL`, -121..6; after a codec reset it is at -21 dB,

@@ -54,7 +54,7 @@
     {{if not .Status.LastTamper.IsZero}}<span class="muted">Last tamper alarm: {{when .Status.LastTamper}}</span>{{end}}
   </div>
 
-  {{if or .Status.Tamper.Open .Status.Tamper.Alarm}}
+  {{if and (not .Status.Tamper.Mount) (or .Status.Tamper.Open .Status.Tamper.Alarm)}}
   <section class="alarm">
     <h2>Tamper alarm</h2>
     <p>{{if .Status.Tamper.Open}}The door station is off the wall.{{else}}The door station is back on the wall.{{end}}
@@ -74,6 +74,21 @@
     </div>
     <video id="live" hidden playsinline muted></video>
     <p class="muted">With the sound of the door station. Talking back works in the app only, browsers allow the microphone only over HTTPS. The hub connects to the door station only while the live view is running.</p>
+  </section>
+
+  <section id="mounting" data-mount="{{.Status.Tamper.Mount}}">
+    <h2>Mounting</h2>
+    <div class="live-bar">
+      <span>Tamper switch: <strong id="tamper-switch" class="{{if .Status.Tamper.Pressed}}ok{{else}}bad{{end}}">{{if .Status.Tamper.Pressed}}pressed{{else}}free{{end}}</strong></span>
+      <span id="tamper-place" class="muted">{{if .Status.Tamper.Open}}counts as off the wall{{else}}counts as on the wall{{end}}</span>
+    </div>
+    {{if .Status.Tamper.Mount}}
+    <p><span class="ok">Mounting mode is on.</span> The siren stays quiet, and the hub neither records nor alarms the phones. It ends by itself after 30 minutes.</p>
+    <form class="inline" method="post" action="/admin/mount"><input type="hidden" name="on" value="0"><button type="submit">End mounting mode</button></form>
+    {{else}}
+    <p class="muted">Turn on the mounting mode before you take the door station off the wall or mount it. The switch on its back must be pressed once the station sits on the wall; this page shows it live.</p>
+    <form class="inline" method="post" action="/admin/mount"><input type="hidden" name="on" value="1"><button class="primary" type="submit">Start mounting mode</button></form>
+    {{end}}
   </section>
 
   <section>

@@ -62,9 +62,11 @@ type hub struct {
 	inMu    sync.Mutex
 	mediaIn io.Writer // stdin of mediad while it runs
 
-	alarmMu    sync.Mutex
-	tamperOpen bool          // the station is off the wall
-	sirenStop  chan struct{} // closed to silence the siren; nil while it is quiet
+	alarmMu       sync.Mutex
+	tamperPressed bool          // the tamper switch is pressed
+	tamperOpen    bool          // the station is off the wall
+	sirenStop     chan struct{} // closed to silence the siren; nil while it is quiet
+	mountUntil    time.Time     // the mounting mode keeps the siren quiet until then
 }
 
 // claimSpeaker makes c the one client that feeds the speaker.
@@ -287,6 +289,7 @@ type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
 	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params"`
 }
 
 type rpcError struct {
@@ -327,8 +330,21 @@ func (h *hub) dispatch(msg []byte) []byte {
 		resp.Result = "pong"
 	case "tamper.state":
 		h.alarmMu.Lock()
-		resp.Result = map[string]any{"open": h.tamperOpen, "alarm": h.sirenStop != nil}
+		resp.Result = map[string]any{
+			"open": h.tamperOpen, "alarm": h.sirenStop != nil, "pressed": h.tamperPressed,
+			"mount": time.Now().Before(h.mountUntil),
+		}
 		h.alarmMu.Unlock()
+	case "mount.set":
+		var p struct {
+			On bool `json:"on"`
+		}
+		if json.Unmarshal(req.Params, &p) != nil {
+			resp.Error = &rpcError{-32602, "Invalid params"}
+			break
+		}
+		h.setMount(p.On, mountFor)
+		resp.Result = p.On
 	case "alarm.stop":
 		resp.Result = h.stopSiren()
 	case "system.info":

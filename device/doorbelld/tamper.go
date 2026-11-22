@@ -8,13 +8,20 @@ import (
 	"time"
 )
 
-// The tamper switch on the back of the door station is pressed while the station is
+// The tamper switch on the back of the door station should be pressed while the station is
 // mounted. The vendor driver DDM reads it (GPIO7_4); the original firmware asks it with the
-// ioctl DDM_IOC_DOOR_TAMPER on /dev/DDM/alarmV2, which gives 1 while the switch is pressed
-// and 0 once the station comes off the wall.
+// ioctl DDM_IOC_DOOR_TAMPER on /dev/DDM/alarmV2, which gives 0 while the switch is pressed
+// and 1 while it is free.
 const (
 	tamperDevice     = "/dev/DDM/alarmV2"
 	ddmIocDoorTamper = 0x40044204
+
+	// tamperOpenWhenPressed says which state of the switch counts as "off the wall". On a
+	// properly mounted station the wall presses the switch, so this should be false; it is
+	// true until that is checked on the first station, whose mounting did not press it.
+	tamperOpenWhenPressed = true
+
+	mountFor = 30 * time.Minute // how long the mounting mode keeps the siren quiet
 )
 
 // watchTamper reports the tamper switch to the RPC clients and sounds the siren for
@@ -27,55 +34,91 @@ func (h *hub) watchTamper(sirenFor time.Duration) {
 		return
 	}
 	defer f.Close()
-	open, err := readTamper(f)
+	pressed, err := readTamper(f)
 	if err != nil {
 		log.Printf("tamper: %v", err)
 		return
 	}
-	sw := debounce{pressed: open}
-	h.setTamper(open)
+	sw := debounce{pressed: pressed}
+	h.setTamper(pressed)
 	for range time.Tick(25 * time.Millisecond) {
-		open, err := readTamper(f)
+		pressed, err := readTamper(f)
 		if err != nil {
 			continue
 		}
-		h.tamperReading(&sw, open, sirenFor)
+		h.tamperReading(&sw, pressed, sirenFor)
 	}
 }
 
-// tamperReading takes one reading of the switch (true while open).
-func (h *hub) tamperReading(sw *debounce, open bool, sirenFor time.Duration) {
-	if !sw.update(open) {
+// tamperReading takes one reading of the switch (true while pressed).
+func (h *hub) tamperReading(sw *debounce, pressed bool, sirenFor time.Duration) {
+	if !sw.update(pressed) {
 		return
 	}
-	if sw.pressed {
-		log.Print("tamper: the station was taken off")
+	open := sw.pressed == tamperOpenWhenPressed
+	if open {
+		log.Printf("tamper: switch pressed %t, the station was taken off", sw.pressed)
 	} else {
-		log.Print("tamper: the station is back on the wall")
+		log.Printf("tamper: switch pressed %t, the station is on the wall", sw.pressed)
 	}
 	h.setTamper(sw.pressed)
-	if sw.pressed && sirenFor > 0 {
+	if open && sirenFor > 0 && !h.mounting() {
 		h.startSiren(sirenFor)
 	}
 }
 
-func (h *hub) setTamper(open bool) {
+func (h *hub) setTamper(pressed bool) {
 	h.alarmMu.Lock()
-	h.tamperOpen = open
+	h.tamperPressed = pressed
+	h.tamperOpen = pressed == tamperOpenWhenPressed
 	h.alarmMu.Unlock()
 	h.broadcast(h.tamperMessage())
 }
 
-// tamperMessage is the notification "tamper" with the state of the switch and the siren.
-// Every RPC client gets it when it connects and whenever something changes.
+// tamperMessage is the notification "tamper": whether the station is off the wall, its
+// siren sounds, the switch is pressed and the mounting mode is on. Every RPC client gets it
+// when it connects and whenever something changes.
 func (h *hub) tamperMessage() []byte {
 	h.alarmMu.Lock()
 	defer h.alarmMu.Unlock()
 	return encode(map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "tamper",
-		"params":  map[string]any{"open": h.tamperOpen, "alarm": h.sirenStop != nil, "time": time.Now().Unix()},
+		"params": map[string]any{
+			"open": h.tamperOpen, "alarm": h.sirenStop != nil, "pressed": h.tamperPressed,
+			"mount": time.Now().Before(h.mountUntil), "time": time.Now().Unix(),
+		},
 	})
+}
+
+// mounting is true while the mounting mode keeps the siren quiet.
+func (h *hub) mounting() bool {
+	h.alarmMu.Lock()
+	defer h.alarmMu.Unlock()
+	return time.Now().Before(h.mountUntil)
+}
+
+// setMount turns the mounting mode on for d, which also silences the siren, or off. It ends
+// by itself, so a forgotten mounting mode does not leave the station unguarded.
+func (h *hub) setMount(on bool, d time.Duration) {
+	h.alarmMu.Lock()
+	if on {
+		h.mountUntil = time.Now().Add(d)
+	} else {
+		h.mountUntil = time.Time{}
+	}
+	h.alarmMu.Unlock()
+	log.Printf("tamper: mounting mode %t", on)
+	if on {
+		h.stopSiren()
+		time.AfterFunc(d, func() {
+			if !h.mounting() {
+				log.Print("tamper: mounting mode ended")
+				h.broadcast(h.tamperMessage())
+			}
+		})
+	}
+	h.broadcast(h.tamperMessage())
 }
 
 func (h *hub) sirenActive() bool {

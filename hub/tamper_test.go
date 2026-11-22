@@ -114,3 +114,72 @@ func TestStopAlarmWithoutDoorbell(t *testing.T) {
 		t.Fatalf("status %d", res.StatusCode)
 	}
 }
+
+// In the mounting mode the hub shows the switch live on the admin page, but neither records
+// nor alarms the apps when the station comes off the wall.
+func TestMountingModeShowsTheSwitchWithoutAlarm(t *testing.T) {
+	mountCalls := make(chan string, 4)
+	addr := fakeDoorbellRPC(t, func(c *ws.Conn) {
+		c.Write(ws.Text, []byte(`{"jsonrpc":"2.0","method":"tamper","params":{"open":false,"pressed":false}}`))
+		for {
+			_, p, err := c.Read()
+			if err != nil {
+				return
+			}
+			if strings.Contains(string(p), `"mount.set"`) {
+				mountCalls <- string(p)
+				c.Write(ws.Text, []byte(`{"jsonrpc":"2.0","method":"tamper","params":{"open":false,"pressed":false,"mount":true}}`))
+				c.Write(ws.Text, []byte(`{"jsonrpc":"2.0","method":"tamper","params":{"open":true,"pressed":true,"mount":true}}`))
+			}
+		}
+	})
+	h := newHub(t, addr)
+	srv := serve(t, h)
+	_, tok, _ := h.store.AddClient("one")
+	a := connect(t, srv, tok)
+	waitSessions(t, h, 1)
+	go h.WatchDoorbell()
+
+	adminReq := func(method, path string) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(method, "http://"+srv+path, strings.NewReader("on=1"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "http://"+srv)
+		req.SetBasicAuth("admin", "pw")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	for i := 0; i < 100 && !h.Status().Connected; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if res := adminReq("POST", "/admin/mount"); res.StatusCode != http.StatusOK { // after the redirect
+		t.Fatalf("POST /admin/mount: %d", res.StatusCode)
+	}
+	if c := <-mountCalls; !strings.Contains(c, `"on":true`) {
+		t.Fatalf("door station got %s", c)
+	}
+	var st map[string]any
+	for i := 0; i < 100; i++ {
+		res := adminReq("GET", "/admin/tamper")
+		json.NewDecoder(res.Body).Decode(&st)
+		res.Body.Close()
+		if st["pressed"] == true {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if st["pressed"] != true || st["mount"] != true || st["open"] != true {
+		t.Fatalf("live state %v", st)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if len(h.store.Messages()) != 0 {
+		t.Fatal("recorded in the mounting mode")
+	}
+	a.SetIdle(200 * time.Millisecond)
+	if _, p, err := a.Read(); err == nil {
+		t.Fatalf("the app got %s in the mounting mode", p)
+	}
+}
