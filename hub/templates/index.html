@@ -60,6 +60,17 @@
     <p class="muted">With the sound of the door station. Talking back works in the app only, browsers allow the microphone only over HTTPS. The hub connects to the door station only while the live view is running.</p>
   </section>
 
+  <section>
+    <h2>Speaker at the door</h2>
+    <form class="add" method="post" action="/admin/settings">
+      <label for="talk_volume">Volume of your voice at the door</label>
+      <input id="talk_volume" name="talk_volume" type="range" min="0" max="100" step="5" value="{{.Settings.TalkVolume}}">
+      <output for="talk_volume">{{.Settings.TalkVolume}} %</output>
+      <button type="submit">Save</button>
+    </form>
+    <p class="muted">The hub levels the voice from the app, so quiet and loud phones sound the same at the door. 100 % is the loudest the speaker plays without distortion. Applies the next time someone talks.</p>
+  </section>
+
   {{if .NewToken}}
   <section>
     <h2>Client "{{.NewName}}" created</h2>

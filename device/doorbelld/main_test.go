@@ -5,6 +5,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -171,5 +174,46 @@ func TestSpeakerFeedsMediadAndAllowsOneClient(t *testing.T) {
 	h.setMediaIn(nil)
 	if err := h.play([]byte("x")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestButtonPressRingsOnceAndIgnoresGlitches(t *testing.T) {
+	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
+	r := &client{out: make(chan []byte, 8)}
+	h.add(r)
+	path := filepath.Join(t.TempDir(), "value")
+	tick := make(chan time.Time) // unbuffered: a send returns once the previous read is handled
+	done := make(chan struct{})
+	go func() { h.pollButton(path, tick); close(done) }()
+	read := func(vals string) { // one read per character
+		for _, v := range vals {
+			os.WriteFile(path, []byte(string(v)+"\n"), 0o644)
+			tick <- time.Now()
+		}
+	}
+	rings := func() int {
+		tick <- time.Now() // the last read is handled
+		return len(r.out)
+	}
+	read("00010")
+	if n := rings(); n != 0 {
+		t.Fatalf("a glitch rang %d times", n)
+	}
+	read("1111111")
+	if n := rings(); n != 1 {
+		t.Fatalf("held button: %d rings", n)
+	}
+	read("1101")
+	if n := rings(); n != 1 {
+		t.Fatalf("a short drop rang again: %d", n)
+	}
+	read("0011")
+	close(tick)
+	<-done
+	if n := len(r.out); n != 2 {
+		t.Fatalf("second press: %d rings", n)
+	}
+	if m := string(<-r.out); !strings.Contains(m, `"button.pressed"`) {
+		t.Fatalf("message %s", m)
 	}
 }

@@ -45,3 +45,10 @@
   }
   setTimeout(poll, 3000);
 })();
+
+// shows the value of the volume slider while it moves
+(() => {
+  const range = document.getElementById("talk_volume");
+  const out = range && range.form.querySelector("output");
+  if (out) range.addEventListener("input", () => { out.textContent = range.value + " %"; });
+})();

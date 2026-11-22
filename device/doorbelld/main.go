@@ -29,8 +29,6 @@ const (
 	opClose    = 0x8
 	opPing     = 0x9
 	opPong     = 0xA
-	evKey      = 1
-	eventSize  = 16 // struct input_event on 32-bit ARM
 
 	maxVideoFrame = 4 << 20
 
@@ -427,34 +425,50 @@ func (h *hub) serve(conn net.Conn) {
 	}
 }
 
-func (h *hub) watchButton(path string, code uint16) {
-	for {
-		f, err := os.Open(path)
+// watchButton reads the bell button from a sysfs GPIO. The button is GPIO4_0 (sysfs 32),
+// high while pressed. The device tree names GPIO4_3 for gpio-keys, which never changes
+// on this board, so /dev/event0 stays silent.
+func (h *hub) watchButton(gpio string) {
+	dir := "/sys/class/gpio/gpio" + gpio
+	if _, err := os.Stat(dir); err != nil {
+		os.WriteFile("/sys/class/gpio/export", []byte(gpio), 0)
+		os.WriteFile(dir+"/direction", []byte("in"), 0)
+	}
+	t := time.NewTicker(25 * time.Millisecond) // a press lasts far longer
+	h.pollButton(dir+"/value", t.C)
+}
+
+// pollButton reports a press once the button reads high twice in a row, and the next one
+// only after it read low twice in a row. It reads once per tick and ends when tick closes.
+func (h *hub) pollButton(path string, tick <-chan time.Time) {
+	pressed, same, failed := false, 0, false
+	for range tick {
+		b, err := os.ReadFile(path)
 		if err != nil {
-			log.Printf("button: %v", err)
-			time.Sleep(5 * time.Second)
+			if !failed {
+				log.Printf("button: %v", err)
+			}
+			failed = true
 			continue
 		}
-		buf := make([]byte, eventSize)
-		for {
-			if _, err = io.ReadFull(f, buf); err != nil {
-				log.Printf("button: %v", err)
-				break
-			}
-			typ := binary.LittleEndian.Uint16(buf[8:])
-			key := binary.LittleEndian.Uint16(buf[10:])
-			val := int32(binary.LittleEndian.Uint32(buf[12:]))
-			if typ == evKey && key == code && val == 1 {
-				log.Print("button pressed")
-				h.broadcast(encode(map[string]any{
-					"jsonrpc": "2.0",
-					"method":  "button.pressed",
-					"params":  map[string]any{"time": int64(binary.LittleEndian.Uint32(buf[0:]))},
-				}))
-			}
+		failed = false
+		high := len(b) > 0 && b[0] == '1'
+		if high == pressed {
+			same = 0
+			continue
 		}
-		f.Close()
-		time.Sleep(time.Second)
+		if same++; same < 2 {
+			continue
+		}
+		pressed, same = high, 0
+		if pressed {
+			log.Print("button pressed")
+			h.broadcast(encode(map[string]any{
+				"jsonrpc": "2.0",
+				"method":  "button.pressed",
+				"params":  map[string]any{"time": time.Now().Unix()},
+			}))
+		}
 	}
 }
 
@@ -513,12 +527,13 @@ func (h *hub) readMedia(r io.Reader) error {
 func main() {
 	listen := flag.String("listen", ":8080", "address of the WebSocket server")
 	media := flag.String("media", "/home/app/oi/mediad", "path to mediad, empty to disable")
-	input := flag.String("input", "/dev/event0", "input device of the bell button")
-	code := flag.Uint("key", 5, "key code of the bell button")
+	button := flag.String("button", "32", "sysfs GPIO of the bell button, empty to disable")
 	flag.Parse()
 
 	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
-	go h.watchButton(*input, uint16(*code))
+	if *button != "" {
+		go h.watchButton(*button)
+	}
 	if *media != "" {
 		go h.runMedia(*media)
 	}

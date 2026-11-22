@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("POST /admin/clients", h.admin(h.addClient))
 	mux.HandleFunc("POST /admin/clients/{id}/delete", h.admin(h.deleteClient))
 	mux.HandleFunc("POST /admin/messages/{id}/delete", h.admin(h.deleteMessage))
+	mux.HandleFunc("POST /admin/settings", h.admin(h.saveSettings))
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
 	mux.HandleFunc("GET /admin/live", h.admin(h.live))
 	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))
@@ -97,8 +99,9 @@ func (h *Hub) admin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// eventsPing is how often the hub pings a client app on /api/events.
-var eventsPing = 20 * time.Second
+// eventsPing is how often the hub pings a client app on /api/events. Each ping wakes the
+// phone, so not too often; the app pings every minute as well, which also keeps it alive here.
+var eventsPing = time.Minute
 
 type apiHandler func(w http.ResponseWriter, r *http.Request, c Client)
 
@@ -123,6 +126,7 @@ type pageData struct {
 	NewToken  string
 	Timeout   int
 	RecordFor int
+	Settings  Settings
 	App       bool
 	AppURL    string
 }
@@ -135,7 +139,7 @@ func (h *Hub) render(w http.ResponseWriter, r *http.Request, name, token string)
 	page.Execute(w, pageData{
 		Status: h.Status(), Clients: h.store.Clients(), Pending: h.regs.Pending(), Messages: h.store.Messages(), NewName: name, NewToken: token,
 		Timeout: int(h.cfg.RingTimeout.Seconds()), RecordFor: int(h.cfg.RecordFor.Seconds()),
-		App: h.hasApp(), AppURL: appURL(r),
+		App: h.hasApp(), AppURL: appURL(r), Settings: h.store.Settings(),
 	})
 }
 
@@ -153,6 +157,21 @@ func (h *Hub) addClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, r, name, token)
+}
+
+func (h *Hub) saveSettings(w http.ResponseWriter, r *http.Request) {
+	v, err := strconv.Atoi(r.FormValue("talk_volume"))
+	if err != nil || v < 0 || v > 100 {
+		http.Error(w, "Volume must be 0 to 100", http.StatusBadRequest)
+		return
+	}
+	set := h.store.Settings()
+	set.TalkVolume = v
+	if err := h.store.SaveSettings(set); err != nil {
+		http.Error(w, "Saving failed", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *Hub) deleteClient(w http.ResponseWriter, r *http.Request) {

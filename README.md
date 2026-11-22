@@ -52,7 +52,7 @@ Then send `Authorization: Bearer <token>` with every request.
 
 | Endpoint | Purpose |
 |---|---|
-| `ws /api/events` | JSON-RPC 2.0. The hub pings every 20 s and drops a client that has not answered for 60 s |
+| `ws /api/events` | JSON-RPC 2.0. The hub pings every 60 s and drops a client that sent nothing for 3 minutes; the app pings every 60 s too |
 | `ws /api/video` | One binary message per frame, H.264 Annex B, starting at the next keyframe |
 | `ws /api/audio` | One binary message per 20 ms of sound: 16 kHz mono 16-bit little-endian PCM |
 | `ws /api/talk` | Send sound in the same format to the speaker of the door station. One speaker at a time; the connection closes right away while someone else talks |
@@ -415,9 +415,16 @@ Treat physical access as equivalent to root access.
   to complete autonegotiation and loses the link after a few seconds.  10 Mbit/s
   half-duplex gives a link but almost no receive traffic.  Check connectors,
   couplers, and the cable pairs if this occurs.
-- **Physical button.** The button event (`/dev/event0`, `gpio-keys`, code 5) is
-  wired up in `doorbelld` but has only been tested with synthetic input.  Real
-  button presses have not been confirmed yet.
+- **Physical button.** The bell button is GPIO4_0 (sysfs GPIO 32), high while
+  pressed.  The device tree declares a `gpio-keys` button on GPIO4_3 (`/dev/event0`,
+  code 5), but that pin never changes on this board, so `doorbelld` polls GPIO 32
+  every 25 ms instead (`-button`).
+- **Audio levels.** `mediad` sets the microphone gain to 30 (`MEDIAD_MIC_VOL`, range
+  -78..80; at 60 the street noise alone was at -25 dBFS and voices clipped) and the
+  speaker to 0 dB (`MEDIAD_SPEAKER_VOL`, -121..6; after a codec reset it is at -21 dB,
+  too quiet).  The hub levels the voice from the app before it reaches the speaker;
+  the volume is set on the admin page.  `device/mediad/avol.c` reads and sets both
+  while `mediad` runs.
 
 ---
 

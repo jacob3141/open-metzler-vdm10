@@ -188,3 +188,37 @@ func (s *Store) SaveMessage(data []byte, t time.Time) (string, error) {
 	}
 	return id, os.Rename(tmp, s.messagePath(id))
 }
+
+// Settings are what the admin sets in the web interface.
+type Settings struct {
+	TalkVolume int `json:"talk_volume"` // percent of the loudest the door speaker plays the app
+}
+
+// DefaultTalkVolume leaves some room above, the leveled voice is loud already.
+const DefaultTalkVolume = 80
+
+func (s *Store) settingsFile() string { return filepath.Join(s.dir, "settings.json") }
+
+// Settings returns the saved settings, or the defaults.
+func (s *Store) Settings() Settings {
+	set := Settings{TalkVolume: DefaultTalkVolume}
+	if b, err := os.ReadFile(s.settingsFile()); err == nil {
+		json.Unmarshal(b, &set)
+	}
+	return set
+}
+
+// SaveSettings stores the settings.
+func (s *Store) SaveSettings(set Settings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, err := json.MarshalIndent(set, "", " ")
+	if err != nil {
+		return err
+	}
+	tmp := s.settingsFile() + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.settingsFile())
+}

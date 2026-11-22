@@ -23,6 +23,8 @@ func (h *Hub) talk(w http.ResponseWriter, r *http.Request, c Client) {
 		return
 	}
 	defer door.Close()
+	volume := float64(h.store.Settings().TalkVolume) / 100
+	var lv leveler
 	log.Printf("talk: %s speaks", c.Name)
 	defer log.Printf("talk: %s stopped", c.Name)
 
@@ -39,7 +41,11 @@ func (h *Hub) talk(w http.ResponseWriter, r *http.Request, c Client) {
 		if err != nil {
 			return
 		}
-		if op == ws.Binary && door.Write(ws.Binary, p) != nil {
+		if op != ws.Binary {
+			continue
+		}
+		lv.process(p, volume)
+		if door.Write(ws.Binary, p) != nil {
 			return
 		}
 	}

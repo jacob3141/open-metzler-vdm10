@@ -247,7 +247,7 @@ class DoorbellService : Service() {
         private const val TAG = "DoorbellService"
         private const val MIN_BACKOFF = 2_000L
         private const val MAX_BACKOFF = 60_000L
-        private const val PING_SECONDS = 15L
+        private const val PING_SECONDS = 60L // each ping wakes the phone; a lost hub shows within two minutes
 
         const val ACTION_ACCEPT = "io.github.jacob3141.doorbell.ACCEPT"
         const val ACTION_REJECT = "io.github.jacob3141.doorbell.REJECT"

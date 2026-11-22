@@ -12,3 +12,4 @@ data/
 /device/mediad/i2cprobe
 /hub/doorbell-hub
 /hub/stubclient
+/device/mediad/avol

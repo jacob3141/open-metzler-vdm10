@@ -349,8 +349,14 @@ static int setup_audio(void)
 	CHK(ioctl(fd, ACODEC_SET_I2S1_FS, &v));
 	v = ACODEC_MIXER_IN1;
 	CHK(ioctl(fd, ACODEC_SET_MIXER_MIC, &v));
-	v = 60;
+	// Microphone gain [-78, 80]: at 60 the street noise alone was at -25 dBFS and a voice
+	// close to the door clipped; at 30 the noise is at about -47 dBFS.
+	v = getenv("MEDIAD_MIC_VOL") ? atoi(getenv("MEDIAD_MIC_VOL")) : 30;
 	CHK(ioctl(fd, ACODEC_SET_INPUT_VOL, &v));
+	// Speaker [-121, 6] dB: after the reset it is at -21 dB, too quiet to understand anyone.
+	// The hub levels the voice from the app, so full scale is the loudest it gets.
+	v = getenv("MEDIAD_SPEAKER_VOL") ? atoi(getenv("MEDIAD_SPEAKER_VOL")) : 0;
+	CHK(ioctl(fd, ACODEC_SET_OUTPUT_VOL, &v));
 	close(fd);
 
 	fd = open("/dev/DDM/sound", O_RDWR);

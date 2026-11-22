@@ -592,7 +592,10 @@ func TestTalkReachesTheSpeaker(t *testing.T) {
 	c.Write(ws.Binary, pcmFrame)
 	select {
 	case p := <-got:
-		if !bytes.Equal(p, pcmFrame) {
+		want := bytes.Clone(pcmFrame) // leveled at the default volume
+		var l leveler
+		l.process(want, DefaultTalkVolume/100.0)
+		if !bytes.Equal(p, want) {
 			t.Fatal("speaker got other data")
 		}
 	case <-time.After(3 * time.Second):
