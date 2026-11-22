@@ -424,8 +424,13 @@ Treat physical access as equivalent to root access.
 
 ```sh
 cd device/doorbelld
-CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -trimpath -ldflags='-s -w' -o doorbelld .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -buildvcs=false -trimpath -gcflags=all=-l -ldflags='-s -w' -o doorbelld .
 ```
+
+The app package in the flash has only as much room as the original one (about 1.45 MB
+compressed for `doorbelld`, `mediad` and the libraries).  `-gcflags=all=-l` (no inlining)
+keeps `doorbelld` small enough; Go 1.26 builds it to 2.9 MB, Go 1.27 to 3.6 MB without
+that flag, which does not fit.
 
 By default it starts `/home/app/oi/mediad`. Pass `-media ""` to run it without video.
 
