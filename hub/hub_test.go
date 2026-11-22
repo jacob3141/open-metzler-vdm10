@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -467,10 +468,14 @@ func TestFrameDur(t *testing.T) {
 }
 
 func liveRequest(t *testing.T, addr string, auth bool, site string) *http.Response {
+	return adminGet(t, addr, "/admin/live", auth, site)
+}
+
+func adminGet(t *testing.T, addr, path string, auth bool, site string) *http.Response {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+"/admin/live", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+addr+path, nil)
 	if auth {
 		req.SetBasicAuth("admin", "pw")
 	}
@@ -534,5 +539,63 @@ func TestAdminWithoutPassword(t *testing.T) {
 	}
 	if res := liveRequest(t, addr, false, "cross-site"); res.StatusCode != http.StatusForbidden {
 		t.Fatal(res.Status)
+	}
+}
+
+func TestLiveAudioStreamsPCMToTheAdmin(t *testing.T) {
+	h := newHub(t, fakeDoorbell(t))
+	addr := serve(t, h)
+	if res := adminGet(t, addr, "/admin/live-audio", false, ""); res.StatusCode != http.StatusUnauthorized {
+		t.Fatal(res.Status)
+	}
+	if res := adminGet(t, addr, "/admin/live-audio", true, "cross-site"); res.StatusCode != http.StatusForbidden {
+		t.Fatal(res.Status)
+	}
+	res := adminGet(t, addr, "/admin/live-audio", true, "same-origin")
+	b := make([]byte, len(pcmFrame))
+	if _, err := io.ReadFull(res.Body, b); err != nil || !bytes.Equal(b, pcmFrame) {
+		t.Fatalf("%v %x", err, b[:4])
+	}
+}
+
+func TestTalkReachesTheSpeaker(t *testing.T) {
+	got := make(chan []byte, 10)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := ws.Upgrade(w, r, 4096)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		for {
+			op, p, err := c.Read()
+			if err != nil {
+				return
+			}
+			if r.URL.Path == "/speaker" && op == ws.Binary {
+				got <- p
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	u, _ := url.Parse(srv.URL)
+	h := newHub(t, u.Host)
+	addr := serve(t, h)
+	if _, err := ws.Dial(addr, "/api/talk", "", 4096, time.Second); err == nil {
+		t.Fatal("talk without a token accepted")
+	}
+	_, tok, _ := h.store.AddClient("one")
+	c, err := ws.Dial(addr, "/api/talk", "Authorization: Bearer "+tok+"\r\n", 4096, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.Write(ws.Binary, pcmFrame)
+	select {
+	case p := <-got:
+		if !bytes.Equal(p, pcmFrame) {
+			t.Fatal("speaker got other data")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("nothing reached the speaker")
 	}
 }

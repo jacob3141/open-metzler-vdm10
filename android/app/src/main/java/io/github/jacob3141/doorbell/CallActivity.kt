@@ -1,10 +1,14 @@
 package io.github.jacob3141.doorbell
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -16,7 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 
 /**
  * The door camera: during a ring with accept and decline, or as a live view. The sound of the
- * door station plays in the live view and once the ring is answered, not while it rings.
+ * door station plays in the live view and once the ring is answered, not while it rings. Then
+ * the user can also talk to the door while holding the talk button; the sound of the door is
+ * muted meanwhile.
  */
 class CallActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
@@ -27,6 +33,8 @@ class CallActivity : AppCompatActivity() {
     private lateinit var accept: Button
     private lateinit var reject: Button
     private lateinit var hangup: Button
+    private lateinit var talk: Button
+    private var talker: Talker? = null
     private var ringId: String? = null
     private var player: H264Player? = null
     private var stream: MediaStream? = null
@@ -57,6 +65,8 @@ class CallActivity : AppCompatActivity() {
             finish()
         }
         hangup.setOnClickListener { finish() }
+        talk = findViewById(R.id.call_talk)
+        setUpTalk()
         findViewById<SurfaceView>(R.id.video).holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) = startVideo(holder)
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
@@ -102,6 +112,7 @@ class CallActivity : AppCompatActivity() {
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
         stopVideo()
+        stopTalk()
         stopAudio()
         super.onDestroy()
     }
@@ -120,7 +131,60 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun syncAudio() {
-        if (wantAudio()) startAudio() else stopAudio()
+        val want = wantAudio()
+        if (want) startAudio() else {
+            stopTalk()
+            stopAudio()
+        }
+        talk.visibility = if (want) View.VISIBLE else View.GONE
+    }
+
+    @SuppressLint("ClickableViewAccessibility") // a click talks for a moment, see performClick
+    private fun setUpTalk() {
+        talk.setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.isPressed = true
+                    startTalk()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.isPressed = false
+                    stopTalk()
+                    if (e.actionMasked == MotionEvent.ACTION_UP) v.performClick()
+                }
+            }
+            true
+        }
+    }
+
+    private fun startTalk() {
+        if (talker != null) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+            return
+        }
+        val hub = prefs.hub ?: return
+        val token = prefs.token ?: return
+        speaker?.setMuted(true)
+        talk.setText(R.string.talk_now)
+        talker = Talker(hub, token) { reason ->
+            stopTalk()
+            status.text = if (reason == null) getString(R.string.talk_busy) else HubException(reason).text(this)
+        }.also { it.start() }
+    }
+
+    private fun stopTalk() {
+        talker?.stop()
+        talker = null
+        speaker?.setMuted(false)
+        if (::talk.isInitialized) talk.setText(R.string.talk_hold)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_MIC && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
+            status.setText(R.string.talk_no_mic)
+        }
     }
 
     private fun startAudio() {
@@ -215,6 +279,7 @@ class CallActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_RING = "ring"
+        private const val REQUEST_MIC = 1
         private const val EXTRA_ACCEPT = "accept"
 
         fun ringIntent(c: Context, id: String, accept: Boolean = false): Intent =

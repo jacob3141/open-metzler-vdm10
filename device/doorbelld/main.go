@@ -40,9 +40,10 @@ const (
 
 // Kinds of clients, chosen by the path of the WebSocket.
 const (
-	kindRPC   = iota // "/": JSON-RPC
-	kindVideo        // "/video": H.264 frames in Annex B
-	kindAudio        // "/audio": 20 ms of 16 kHz mono 16-bit little-endian PCM per message
+	kindRPC     = iota // "/": JSON-RPC
+	kindVideo          // "/video": H.264 frames in Annex B
+	kindAudio          // "/audio": 20 ms of 16 kHz mono 16-bit little-endian PCM per message
+	kindSpeaker        // "/speaker": sends PCM like /audio to the speaker; one client at a time
 )
 
 var errProtocol = errors.New("websocket protocol error")
@@ -58,6 +59,47 @@ type hub struct {
 	mu      sync.Mutex
 	clients map[*client]struct{}
 	started time.Time
+	speaker *client // the client on /speaker, if any
+
+	inMu    sync.Mutex
+	mediaIn io.Writer // stdin of mediad while it runs
+}
+
+// claimSpeaker makes c the one client that feeds the speaker.
+func (h *hub) claimSpeaker(c *client) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.speaker != nil {
+		return false
+	}
+	h.speaker = c
+	return true
+}
+
+func (h *hub) releaseSpeaker(c *client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.speaker == c {
+		h.speaker = nil
+	}
+}
+
+// play hands PCM to mediad. Without mediad the sound is dropped.
+func (h *hub) play(pcm []byte) error {
+	h.inMu.Lock()
+	defer h.inMu.Unlock()
+	if h.mediaIn == nil {
+		return nil
+	}
+	hdr := binary.LittleEndian.AppendUint32(nil, uint32(len(pcm)))
+	_, err := h.mediaIn.Write(append(append(hdr, flagAudio), pcm...))
+	return err
+}
+
+func (h *hub) setMediaIn(w io.Writer) {
+	h.inMu.Lock()
+	defer h.inMu.Unlock()
+	h.mediaIn = w
 }
 
 func (h *hub) add(c *client) {
@@ -314,6 +356,13 @@ func (h *hub) serve(conn net.Conn) {
 		c.kind = kindVideo
 	case "/audio":
 		c.kind = kindAudio
+	case "/speaker":
+		c.kind = kindSpeaker
+		if !h.claimSpeaker(c) {
+			conn.Write(makeFrame(opClose, []byte{0x03, 0xF0})) // 1008: someone else is talking
+			return
+		}
+		defer h.releaseSpeaker(c)
 	}
 	h.add(c)
 	defer h.remove(c)
@@ -347,6 +396,13 @@ func (h *hub) serve(conn net.Conn) {
 			}
 			if r := h.dispatch(p); r != nil {
 				reply = makeFrame(opText, r)
+			}
+		case opBinary:
+			if c.kind != kindSpeaker {
+				return
+			}
+			if err := h.play(p); err != nil {
+				log.Printf("speaker: %v", err)
 			}
 		case opPing:
 			reply = makeFrame(opPong, p)
@@ -402,13 +458,18 @@ func (h *hub) watchButton(path string, code uint16) {
 	}
 }
 
-// runMedia starts mediad and hands its frames to the clients of /video and /audio.
+// runMedia starts mediad, hands its frames to the clients of /video and /audio, and feeds it
+// the sound of /speaker.
 func (h *hub) runMedia(path string) {
 	for {
 		cmd := exec.Command(path)
 		cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+filepath.Dir(path))
 		cmd.Stderr = os.Stderr
 		out, err := cmd.StdoutPipe()
+		var in io.WriteCloser
+		if err == nil {
+			in, err = cmd.StdinPipe()
+		}
 		if err == nil {
 			err = cmd.Start()
 		}
@@ -417,7 +478,10 @@ func (h *hub) runMedia(path string) {
 			time.Sleep(10 * time.Second)
 			continue
 		}
+		h.setMediaIn(in)
 		err = h.readMedia(bufio.NewReaderSize(out, 256*1024))
+		h.setMediaIn(nil)
+		in.Close()
 		cmd.Process.Kill()
 		log.Printf("mediad exited: %v (%v)", err, cmd.Wait())
 		time.Sleep(5 * time.Second)

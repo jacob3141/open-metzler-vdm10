@@ -29,7 +29,11 @@
 
     <string name="call_ringing">Es klingelt an der Tür</string>
     <string name="call_answering">Nehme an …</string>
-    <string name="call_answered">Angenommen. Du hörst die Tür, zurücksprechen geht noch nicht.</string>
+    <string name="call_answered">Angenommen. Halte die Taste, um zu sprechen.</string>
+    <string name="talk_hold">Halten zum Sprechen</string>
+    <string name="talk_now">Du sprichst … loslassen zum Zuhören</string>
+    <string name="talk_busy">Gerade spricht jemand anderes an der Tür</string>
+    <string name="talk_no_mic">Erlaube das Mikrofon, um mit der Tür zu sprechen</string>
     <string name="call_taken">%1$s hat angenommen</string>
     <string name="call_over">Das Klingeln ist vorbei</string>
     <string name="call_connecting">Verbinde mit der Kamera …</string>
@@ -37,7 +41,7 @@
 
     <string name="main_hub">%1$s · Hub %2$s</string>
     <string name="main_live">Tür anzeigen</string>
-    <string name="main_note">Die App funktioniert nur im WLAN zu Hause. Du siehst und hörst die Tür, zurücksprechen geht noch nicht.</string>
+    <string name="main_note">Die App funktioniert nur im WLAN zu Hause. Du siehst und hörst die Tür und sprichst, solange du eine Taste hältst.</string>
     <string name="retry">Erneut versuchen</string>
     <string name="pair_again">Neu verbinden</string>
     <string name="allow">Erlauben</string>

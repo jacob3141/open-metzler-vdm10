@@ -51,6 +51,12 @@ class PcmPlayer {
         }
     }
 
+    /** Silences the sound while the user talks, so the phone does not send it back. */
+    @Synchronized
+    fun setMuted(muted: Boolean) {
+        if (!released) track.setVolume(if (muted) 0f else 1f)
+    }
+
     @Synchronized
     fun release() {
         if (released) return

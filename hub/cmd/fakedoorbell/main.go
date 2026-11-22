@@ -1,6 +1,6 @@
 // fakedoorbell stands in for doorbelld while developing the hub and the app. It speaks the
-// JSON-RPC of the door station on /, relays video and sound of a real door station on /video
-// and /audio, and presses the button when it gets POST /ring.
+// JSON-RPC of the door station on /, relays video, sound and speaker of a real door station on
+// /video, /audio and /speaker, and presses the button when it gets POST /ring.
 //
 //	fakedoorbell -listen :8090 -video doorbell.home.arpa:8080
 //	curl -X POST localhost:8090/ring
@@ -52,9 +52,10 @@ func main() {
 			return
 		}
 		defer src.Close()
-		go func() { // ends the relay when the hub goes away
+		go func() { // passes on what the hub sends (/speaker) and ends the relay when it goes away
 			for {
-				if _, _, err := c.Read(); err != nil {
+				op, p, err := c.Read()
+				if err != nil || op == ws.Binary && src.Write(op, p) != nil {
 					src.Close()
 					return
 				}
@@ -71,6 +72,7 @@ func main() {
 	}
 	http.HandleFunc("GET /video", relay)
 	http.HandleFunc("GET /audio", relay)
+	http.HandleFunc("GET /speaker", relay)
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		c, err := ws.Upgrade(w, r, 1<<20)
 		if err != nil {

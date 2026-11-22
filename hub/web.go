@@ -44,6 +44,7 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/messages/{id}", h.admin(h.serveMessage))
 	mux.HandleFunc("GET /admin/live", h.admin(h.live))
 	mux.HandleFunc("GET /admin/live.js", h.admin(liveScript))
+	mux.HandleFunc("GET /admin/live-audio", h.admin(h.liveAudio))
 	mux.HandleFunc("GET /admin/admin.js", h.admin(adminScript))
 	mux.HandleFunc("GET /admin/registrations", h.admin(h.pendingJSON))
 	mux.HandleFunc("POST /admin/registrations/{id}/approve", h.admin(h.approveRegistration))
@@ -55,6 +56,7 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("GET /api/events", h.api(h.events))
 	mux.HandleFunc("GET /api/video", h.api(h.stream(h.feed)))
 	mux.HandleFunc("GET /api/audio", h.api(h.stream(h.audio)))
+	mux.HandleFunc("GET /api/talk", h.api(h.talk))
 	mux.HandleFunc("GET /api/messages", h.api(h.listMessages))
 	mux.HandleFunc("GET /api/messages/{id}", h.api(h.apiMessage))
 	mux.HandleFunc("DELETE /api/client", h.api(h.deleteSelf))
@@ -268,7 +270,7 @@ func (h *Hub) handleRPC(s *Session, p []byte) []byte {
 		return rpcReply(req.ID, "pong", 0, "")
 	case "ring.accept":
 		if h.Accept(s, req.Params.ID) {
-			return rpcReply(req.ID, map[string]any{"video": "/api/video", "audio": "/api/audio"}, 0, "")
+			return rpcReply(req.ID, map[string]any{"video": "/api/video", "audio": "/api/audio", "talk": "/api/talk"}, 0, "")
 		}
 		return rpcReply(req.ID, nil, -32000, "Ring is no longer active")
 	case "ring.reject":

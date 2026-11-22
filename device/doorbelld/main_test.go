@@ -149,3 +149,27 @@ func TestMediaFramesGoToTheirClients(t *testing.T) {
 		t.Fatalf("audio frame %q", got)
 	}
 }
+
+func TestSpeakerFeedsMediadAndAllowsOneClient(t *testing.T) {
+	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
+	var in bytes.Buffer
+	h.setMediaIn(&in)
+	a, b := &client{}, &client{}
+	if !h.claimSpeaker(a) || h.claimSpeaker(b) {
+		t.Fatal("second speaker accepted")
+	}
+	if err := h.play([]byte("pcm")); err != nil {
+		t.Fatal(err)
+	}
+	if want := []byte{3, 0, 0, 0, flagAudio, 'p', 'c', 'm'}; !bytes.Equal(in.Bytes(), want) {
+		t.Fatalf("mediad got %v", in.Bytes())
+	}
+	h.releaseSpeaker(a)
+	if !h.claimSpeaker(b) {
+		t.Fatal("speaker not free after release")
+	}
+	h.setMediaIn(nil)
+	if err := h.play([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+}

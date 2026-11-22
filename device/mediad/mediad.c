@@ -2,6 +2,8 @@
 // Audio: microphone -> FM2018 echo canceller -> inner codec -> AI, 16 kHz mono.
 // Writes frames to stdout as [length u32 LE][flags u8][data]. Flag bit 0 marks a keyframe,
 // bit 1 an audio frame: 20 ms of 16-bit little-endian PCM. Without bit 1 the data is Annex B H.264.
+// Reads frames in the same format from stdin and plays their PCM (flag bit 1) on the speaker,
+// 16 kHz mono. Frames without bit 1 are ignored.
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
@@ -34,6 +36,7 @@
 #include "mpi_venc.h"
 #include "hi_comm_aio.h"
 #include "mpi_ai.h"
+#include "mpi_ao.h"
 #include "acodec.h"
 
 #define W 1920
@@ -375,7 +378,70 @@ static int setup_audio(void)
 	memset(&p, 0, sizeof(p));
 	p.u32UsrFrmDepth = 30;
 	CHK(HI_MPI_AI_SetChnParam(0, 0, &p));
+
+	// The speaker runs with the same attributes; AI and AO share the I2S clock.
+	HI_MPI_AO_DisableChn(0, 0);
+	HI_MPI_AO_Disable(0);
+	CHK(HI_MPI_AO_SetPubAttr(0, &a));
+	CHK(HI_MPI_AO_Enable(0));
+	CHK(HI_MPI_AO_EnableChn(0, 0));
 	return 0;
+}
+
+static int read_all(int fd, void *buf, size_t n)
+{
+	char *p = buf;
+
+	while (n > 0) {
+		ssize_t r = read(fd, p, n);
+		if (r <= 0)
+			return -1;
+		p += r;
+		n -= r;
+	}
+	return 0;
+}
+
+static void play(const unsigned char *pcm, HI_U32 len)
+{
+	AUDIO_FRAME_S f;
+
+	memset(&f, 0, sizeof(f));
+	f.enBitwidth = AUDIO_BIT_WIDTH_16;
+	f.enSoundmode = AUDIO_SOUND_MODE_MONO;
+	f.pVirAddr[0] = (HI_VOID *)pcm;
+	f.u32Len = len;
+	HI_MPI_AO_SendFrame(0, 0, &f, 1000);
+}
+
+// speaker_thread plays what arrives on stdin, in frames of AUDIO_POINTS samples. It ends when
+// stdin closes, which happens when nobody feeds it (an older doorbelld).
+static void *speaker_thread(void *arg)
+{
+	static unsigned char buf[64 * 1024], frame[AUDIO_POINTS * 2];
+	HI_U32 have = 0;
+
+	for (;;) {
+		unsigned char hdr[5];
+		HI_U32 len, i;
+
+		if (read_all(0, hdr, sizeof(hdr)) != 0)
+			break;
+		len = hdr[0] | hdr[1] << 8 | hdr[2] << 16 | (HI_U32)hdr[3] << 24;
+		if (len > sizeof(buf) || read_all(0, buf, len) != 0)
+			break;
+		if (!(hdr[4] & FLAG_AUDIO))
+			continue;
+		for (i = 0; i < len; i++) {
+			frame[have++] = buf[i];
+			if (have == sizeof(frame)) {
+				play(frame, have);
+				have = 0;
+			}
+		}
+	}
+	fprintf(stderr, "speaker: input closed\n");
+	return NULL;
 }
 
 static void *audio_thread(void *arg)
@@ -416,6 +482,7 @@ int main(void)
 
 		audio_out = out;
 		CHK(pthread_create(&t, NULL, audio_thread, &audio_out));
+		CHK(pthread_create(&t, NULL, speaker_thread, NULL));
 	}
 	stream(out);
 	return 0;

@@ -1,4 +1,5 @@
-// Live view: plays /admin/live (fragmented MP4) with Media Source Extensions.
+// Live view: plays /admin/live (fragmented MP4) with Media Source Extensions, and the sound of
+// /admin/live-audio (raw 16 kHz PCM) with Web Audio.
 "use strict";
 
 (() => {
@@ -12,6 +13,7 @@
   let wanted = false;
   let abort = null;
   let retry = null;
+  let sound = null;
 
   function setState(s) { state.textContent = s; }
 
@@ -100,10 +102,66 @@
     }
   }
 
+  // Sound plays as soon as it arrives, at most maxSoundLag behind; it does not wait for the video.
+  const rate = 16000;
+  const maxSoundLag = 0.5;
+
+  async function playSound(ctx, signal) {
+    const res = await fetch(location.origin + "/admin/live-audio", { signal, cache: "no-store" });
+    if (!res.ok) return;
+    const reader = res.body.getReader();
+    let next = 0;
+    let rest = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      let bytes = value;
+      if (rest) {
+        bytes = new Uint8Array(rest.length + value.length);
+        bytes.set(rest);
+        bytes.set(value, rest.length);
+        rest = null;
+      }
+      const n = bytes.length >> 1;
+      if (bytes.length & 1) rest = bytes.slice(bytes.length - 1);
+      if (!n) continue;
+      const view = new DataView(bytes.buffer, bytes.byteOffset, n * 2);
+      const buf = ctx.createBuffer(1, n, rate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) data[i] = view.getInt16(i * 2, true) / 32768;
+      const now = ctx.currentTime;
+      if (next < now || next > now + maxSoundLag) next = now + 0.1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(next);
+      next += buf.duration;
+    }
+  }
+
+  function startSound() {
+    // created in the click, so the browser allows it to play
+    const ctx = new AudioContext({ sampleRate: rate });
+    const ac = new AbortController();
+    sound = { ctx, ac };
+    const loop = () => playSound(ctx, ac.signal).catch(() => {}).finally(() => {
+      if (sound && sound.ac === ac && !ac.signal.aborted) setTimeout(loop, 3000);
+    });
+    loop();
+  }
+
+  function stopSound() {
+    if (!sound) return;
+    sound.ac.abort();
+    sound.ctx.close();
+    sound = null;
+  }
+
   function start() {
     wanted = true;
     setButton();
     video.hidden = false;
+    startSound();
     run();
   }
 
@@ -111,6 +169,7 @@
     wanted = false;
     clearTimeout(retry);
     if (abort) abort.abort();
+    stopSound();
     detach();
     video.hidden = true;
     setButton();

@@ -38,41 +38,58 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:gravity="center"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:padding="24dp">
 
         <Button
-            android:id="@+id/call_reject"
-            android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_marginEnd="12dp"
-            android:layout_weight="1"
-            android:backgroundTint="@color/reject"
-            android:text="@string/reject"
-            android:textColor="@android:color/white"
-            android:textSize="18sp" />
-
-        <Button
-            android:id="@+id/call_accept"
-            android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
+            android:id="@+id/call_talk"
+            android:layout_width="match_parent"
+            android:layout_height="88dp"
+            android:layout_marginBottom="16dp"
             android:backgroundTint="@color/accept"
-            android:text="@string/accept"
+            android:text="@string/talk_hold"
             android:textColor="@android:color/white"
-            android:textSize="18sp" />
-
-        <Button
-            android:id="@+id/call_hangup"
-            android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_weight="1"
-            android:backgroundTint="@color/reject"
-            android:text="@string/hang_up"
-            android:textColor="@android:color/white"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/call_reject"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/reject"
+                android:text="@string/reject"
+                android:textColor="@android:color/white"
+                android:textSize="18sp" />
+
+            <Button
+                android:id="@+id/call_accept"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/accept"
+                android:text="@string/accept"
+                android:textColor="@android:color/white"
+                android:textSize="18sp" />
+
+            <Button
+                android:id="@+id/call_hangup"
+                android:layout_width="0dp"
+                android:layout_height="64dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/reject"
+                android:text="@string/hang_up"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:visibility="gone" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>
