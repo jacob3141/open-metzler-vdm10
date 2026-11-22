@@ -35,7 +35,7 @@ The web interface is on port 8088. If `HUB_ADMIN_PASSWORD` is set, log in with a
 
 It has a live view of the door camera. The hub sends the video as fragmented MP4 from `GET /admin/live`, and the page plays it with Media Source Extensions (`ManagedMediaSource` on iOS 17.1 and later). This works over plain HTTP. The hub connects to the door station video only while someone is watching or a message is being recorded.
 
-The hub announces itself in the network by mDNS as `_doorbell-hub._tcp` (`HUB_MDNS=off` turns this off, `HUB_MDNS_NAME` sets the name), so the Android app finds it without typing an address.
+The hub announces itself in the network by mDNS as `_doorbell-hub._tcp` (`HUB_MDNS=off` turns this off, `HUB_MDNS_NAME` sets the name), so the Android app finds it without typing an address. Give the hub a name in the DNS of your router (e.g. `doorbell-hub.home.arpa`): the app then keeps that name instead of the IP address, so the phone still finds the hub if its address changes.
 
 ## Android app
 

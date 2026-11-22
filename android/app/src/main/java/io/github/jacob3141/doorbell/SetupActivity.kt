@@ -16,6 +16,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import java.net.InetAddress
 import java.util.concurrent.Executors
 
 /**
@@ -59,7 +60,7 @@ class SetupActivity : AppCompatActivity() {
         code = findViewById(R.id.setup_code)
         waitText = findViewById(R.id.setup_wait_text)
 
-        address.setText(prefs.hub?.removePrefix("http://").orEmpty())
+        address.setText(prefs.hub?.removePrefix("http://")?.removeSuffix(":${HubAddress.DEFAULT_PORT}").orEmpty())
         name.setText(prefs.deviceName ?: deviceName())
         request.setOnClickListener { ask() }
         findViewById<Button>(R.id.setup_cancel).setOnClickListener { cancel() }
@@ -263,19 +264,33 @@ class SetupActivity : AppCompatActivity() {
             }
 
             override fun onServiceResolved(s: NsdServiceInfo) {
-                val host = s.host?.hostAddress
-                main.post {
-                    resolveBusy = false
-                    if (host != null) addFound(s.serviceName, host, s.port)
-                    resolveNext()
+                val ip = s.host
+                io.execute {
+                    // Keep the DNS name of the hub, not its address, if the home network has one
+                    val host = ip?.let { nameOf(it) ?: it.hostAddress }
+                    main.post {
+                        resolveBusy = false
+                        if (host != null) addFound(s.serviceName, host, s.port)
+                        resolveNext()
+                    }
                 }
             }
         })
     }
 
+    /** The name the DNS of the home network gives [ip], if that name leads back to [ip]. */
+    private fun nameOf(ip: InetAddress): String? = try {
+        val name = InetAddress.getByAddress(ip.address).canonicalHostName.trimEnd('.')
+        val n = WifiNet.network
+        val back = if (n != null) n.getAllByName(name) else InetAddress.getAllByName(name)
+        if (name != ip.hostAddress && back.any { it == ip }) name else null
+    } catch (e: Exception) {
+        null
+    }
+
     private fun addFound(service: String, host: String, port: Int) {
         val shownHost = if (host.contains(':')) "[$host]" else host
-        val addr = "$shownHost:$port"
+        val addr = if (port == HubAddress.DEFAULT_PORT) shownHost else "$shownHost:$port"
         if (!shown.add(addr)) return
         searching.visibility = View.GONE
         val b = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {

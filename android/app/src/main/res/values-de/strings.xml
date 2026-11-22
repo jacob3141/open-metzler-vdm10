@@ -52,7 +52,7 @@
     <string name="setup_intro">Das Telefon bittet den Hub um Zugang. Du gibst es dann in der Weboberfläche des Hubs frei.</string>
     <string name="setup_searching">Suche den Hub im WLAN …</string>
     <string name="setup_found_item">%1$s  (%2$s)</string>
-    <string name="setup_address">Adresse des Hubs, z. B. 10.0.3.10:8088</string>
+    <string name="setup_address">Adresse des Hubs, z. B. doorbell-hub.home.arpa</string>
     <string name="setup_name">Name dieses Telefons</string>
     <string name="setup_request">Zugang anfordern</string>
     <string name="setup_code">Code</string>
@@ -66,7 +66,7 @@
     <string name="messages_none">Keine Nachrichten.</string>
     <string name="player_error">Die Nachricht lässt sich nicht abspielen.</string>
 
-    <string name="err_address">Gib die Adresse des Hubs ein, z. B. 10.0.3.10:8088.</string>
+    <string name="err_address">Gib die Adresse des Hubs ein, z. B. doorbell-hub.home.arpa.</string>
     <string name="err_unreachable">Der Hub ist nicht erreichbar. Ist das Telefon im WLAN zu Hause?</string>
     <string name="err_bad_answer">Der Hub hat mit einem Fehler geantwortet (HTTP %1$d).</string>
     <string name="err_expired">Die Anfrage ist abgelaufen. Bitte frage erneut an.</string>

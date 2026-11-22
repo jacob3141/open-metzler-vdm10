@@ -62,7 +62,7 @@ class ParsingTest {
 
     @Test
     fun normalizesHubAddresses() {
-        assertEquals("http://10.0.3.10:8088", HubAddress.normalize("10.0.3.10"))
+        assertEquals("http://doorbell-hub.home.arpa:8088", HubAddress.normalize("doorbell-hub.home.arpa"))
         assertEquals("http://10.0.3.10:9000", HubAddress.normalize(" http://10.0.3.10:9000/ "))
         assertEquals("http://hub.home.arpa:8088", HubAddress.normalize("hub.home.arpa"))
         assertEquals("http://[fd4a::1]:8088", HubAddress.normalize("[fd4a::1]"))

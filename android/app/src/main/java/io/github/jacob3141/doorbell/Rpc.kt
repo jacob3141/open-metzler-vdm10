@@ -40,7 +40,7 @@ object Rpc {
     }
 }
 
-/** Turns what the user typed into the base URL of the hub, e.g. "10.0.3.10" → "http://10.0.3.10:8088". */
+/** Turns what the user typed into the base URL of the hub, e.g. "doorbell-hub.home.arpa" → "http://doorbell-hub.home.arpa:8088". */
 object HubAddress {
     const val DEFAULT_PORT = 8088
 
