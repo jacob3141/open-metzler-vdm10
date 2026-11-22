@@ -12,6 +12,10 @@ const (
 	videoWidth  = 1920
 	videoHeight = 1080
 	timescale   = 90000
+
+	// The doorbell sends audio as 16-bit little-endian mono PCM, 20 ms per frame.
+	audioRate        = 16000
+	audioChunkFrames = audioRate / 50
 )
 
 // Frame is one H.264 picture in Annex B format. At is when the hub received it.
@@ -145,13 +149,48 @@ func trak(dur uint32, stbl []byte) []byte {
 	)
 }
 
-func mvhd(dur uint32) []byte {
-	return box("mvhd", u32s(0, 0, 0, timescale, dur, 0x10000), u16s(0x100, 0), make([]byte, 8), matrix, make([]byte, 24), u32s(2))
+func mvhd(dur, nextTrack uint32) []byte {
+	return box("mvhd", u32s(0, 0, 0, timescale, dur, 0x10000), u16s(0x100, 0), make([]byte, 8), matrix, make([]byte, 24), u32s(nextTrack))
+}
+
+// audioTrak is track 2: PCM in a QuickTime "sowt" sample entry (16-bit little endian),
+// which browsers and Android play without a decoder of their own. Each chunk holds
+// audioChunkFrames samples; offsets lists where the chunks start in the file.
+func audioTrak(samples uint32, offsets []uint32) []byte {
+	sowt := bytes.Join([][]byte{
+		make([]byte, 6), u16s(1), make([]byte, 8), u16s(1, 16, 0, 0), u32s(audioRate << 16),
+	}, nil)
+	stco := u32s(0, uint32(len(offsets)))
+	for _, o := range offsets {
+		stco = append(stco, u32s(o)...)
+	}
+	stbl := box("stbl",
+		box("stsd", u32s(0, 1), box("sowt", sowt)),
+		box("stts", u32s(0, 1, samples, 1)),
+		box("stsc", u32s(0, 1, 1, audioChunkFrames, 1)),
+		box("stsz", u32s(0, 2, samples)),
+		box("stco", stco),
+	)
+	minf := box("minf",
+		box("smhd", u32s(0, 0)),
+		box("dinf", box("dref", u32s(0, 1), box("url ", u32s(1)))),
+		stbl,
+	)
+	mdia := box("mdia",
+		box("mdhd", u32s(0, 0, 0, audioRate, samples), u16s(0x55C4, 0)),
+		box("hdlr", u32s(0, 0), []byte("soun"), make([]byte, 12), []byte("SoundHandler\x00")),
+		minf,
+	)
+	dur := uint32(uint64(samples) * timescale / audioRate)
+	return box("trak",
+		box("tkhd", u32s(3, 0, 0, 2, 0, dur, 0, 0), u16s(0, 0, 0x100, 0), matrix, u32s(0, 0)),
+		mdia,
+	)
 }
 
 // WriteMP4 builds an MP4 file with the index at the start. The first frame must be a
-// keyframe with SPS and PPS.
-func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
+// keyframe with SPS and PPS. audio is PCM that starts with the first frame, nil for none.
+func WriteMP4(frames []Frame, audio []byte, seconds float64) ([]byte, error) {
 	if len(frames) == 0 || !frames[0].Key {
 		return nil, errors.New("mp4: first frame is not a keyframe")
 	}
@@ -181,6 +220,10 @@ func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
 		delta = timescale / 30
 	}
 	dur := delta * uint32(len(frames))
+	videoSize := uint32(mdat.Len())
+	audio = audio[:len(audio)/(2*audioChunkFrames)*(2*audioChunkFrames)]
+	mdat.Write(audio)
+	samples := uint32(len(audio) / 2)
 
 	ftyp := box("ftyp", []byte("isom"), u32s(0x200), []byte("isomiso2avc1mp41"))
 	moov := func(offset uint32) []byte {
@@ -200,7 +243,14 @@ func WriteMP4(frames []Frame, seconds float64) ([]byte, error) {
 			box("stsz", stsz),
 			box("stco", u32s(0, 1, offset)),
 		)
-		return box("moov", mvhd(dur), trak(dur, stbl))
+		if samples == 0 {
+			return box("moov", mvhd(dur, 2), trak(dur, stbl))
+		}
+		var chunks []uint32
+		for o := uint32(0); o < samples*2; o += 2 * audioChunkFrames {
+			chunks = append(chunks, offset+videoSize+o)
+		}
+		return box("moov", mvhd(dur, 3), trak(dur, stbl), audioTrak(samples, chunks))
 	}
 	head := uint32(len(ftyp) + len(moov(0)) + 8)
 	return bytes.Join([][]byte{ftyp, moov(head), box("mdat", mdat.Bytes())}, nil), nil
@@ -234,7 +284,7 @@ func (m *Fragmenter) Init() []byte {
 		box("stco", u32s(0, 0)),
 	)
 	mvex := box("mvex", box("trex", u32s(0, 1, 1, 0, 0, 0)))
-	return bytes.Join([][]byte{ftyp, box("moov", mvhd(0), trak(0, stbl), mvex)}, nil)
+	return bytes.Join([][]byte{ftyp, box("moov", mvhd(0, 2), trak(0, stbl), mvex)}, nil)
 }
 
 // Fragment returns one media segment holding f, shown for dur ticks of 1/90000 s.

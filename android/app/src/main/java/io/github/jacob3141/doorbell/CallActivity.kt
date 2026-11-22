@@ -14,7 +14,10 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
-/** The door camera: during a ring with accept and decline, or as a live view. */
+/**
+ * The door camera: during a ring with accept and decline, or as a live view. The sound of the
+ * door station plays in the live view and once the ring is answered, not while it rings.
+ */
 class CallActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
     private lateinit var prefs: Prefs
@@ -26,7 +29,10 @@ class CallActivity : AppCompatActivity() {
     private lateinit var hangup: Button
     private var ringId: String? = null
     private var player: H264Player? = null
-    private var stream: VideoStream? = null
+    private var stream: MediaStream? = null
+    private var audio: MediaStream? = null
+    private var speaker: PcmPlayer? = null
+    private var started = false
     private val onState = { render() }
     private val close = Runnable { finish() }
 
@@ -81,22 +87,59 @@ class CallActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        started = true
         DoorbellState.listen(onState)
         render()
     }
 
     override fun onStop() {
         DoorbellState.unlisten(onState)
+        started = false
+        syncAudio()
         super.onStop()
     }
 
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
         stopVideo()
+        stopAudio()
         super.onDestroy()
     }
 
     private fun render() {
+        renderState()
+        syncAudio()
+    }
+
+    private fun wantAudio(): Boolean {
+        if (!started) return false
+        val id = ringId ?: return true // live view
+        val r = DoorbellState.ring
+        return r != null && r.id == id &&
+            (r.state == DoorbellState.RingState.ANSWERING || r.state == DoorbellState.RingState.ANSWERED)
+    }
+
+    private fun syncAudio() {
+        if (wantAudio()) startAudio() else stopAudio()
+    }
+
+    private fun startAudio() {
+        if (audio != null) return
+        val hub = prefs.hub ?: return
+        val token = prefs.token ?: return
+        val p = PcmPlayer()
+        speaker = p
+        audio = MediaStream(hub, token, "/api/audio", p::offer) {}.also { it.start() }
+    }
+
+    private fun stopAudio() {
+        audio?.stop()
+        audio = null
+        speaker?.release()
+        speaker = null
+    }
+
+    private fun renderState() {
         val id = ringId
         val r = DoorbellState.ring
         main.removeCallbacks(close)
@@ -158,7 +201,7 @@ class CallActivity : AppCompatActivity() {
             },
         )
         player = p
-        stream = VideoStream(hub, token, p::offer) { problem ->
+        stream = MediaStream(hub, token, "/api/video", p::offer) { problem ->
             if (problem != null && ringId == null) status.text = HubException(problem).text(this)
         }.also { it.start() }
     }

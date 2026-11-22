@@ -33,6 +33,16 @@ const (
 	eventSize  = 16 // struct input_event on 32-bit ARM
 
 	maxVideoFrame = 4 << 20
+
+	flagKey   = 1
+	flagAudio = 2
+)
+
+// Kinds of clients, chosen by the path of the WebSocket.
+const (
+	kindRPC   = iota // "/": JSON-RPC
+	kindVideo        // "/video": H.264 frames in Annex B
+	kindAudio        // "/audio": 20 ms of 16 kHz mono 16-bit little-endian PCM per message
 )
 
 var errProtocol = errors.New("websocket protocol error")
@@ -40,7 +50,7 @@ var errProtocol = errors.New("websocket protocol error")
 type client struct {
 	conn    net.Conn
 	out     chan []byte
-	video   bool
+	kind    int
 	needKey bool
 }
 
@@ -74,7 +84,7 @@ func (h *hub) broadcast(msg []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if c.video {
+		if c.kind != kindRPC {
 			continue
 		}
 		select {
@@ -91,7 +101,7 @@ func (h *hub) broadcastVideo(data []byte, key bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
-		if !c.video || (c.needKey && !key) {
+		if c.kind != kindVideo || (c.needKey && !key) {
 			continue
 		}
 		if frame == nil {
@@ -102,6 +112,25 @@ func (h *hub) broadcastVideo(data []byte, key bool) {
 			c.needKey = false
 		default:
 			c.needKey = true
+		}
+	}
+}
+
+// A client that falls behind loses audio frames.
+func (h *hub) broadcastAudio(data []byte) {
+	var frame []byte
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for c := range h.clients {
+		if c.kind != kindAudio {
+			continue
+		}
+		if frame == nil {
+			frame = makeFrame(opBinary, data)
+		}
+		select {
+		case c.out <- frame:
+		default:
 		}
 	}
 }
@@ -279,7 +308,13 @@ func (h *hub) serve(conn net.Conn) {
 	}
 	conn.SetDeadline(time.Time{})
 
-	c := &client{conn: conn, out: make(chan []byte, 64), video: path == "/video", needKey: true}
+	c := &client{conn: conn, out: make(chan []byte, 64), needKey: true}
+	switch path {
+	case "/video":
+		c.kind = kindVideo
+	case "/audio":
+		c.kind = kindAudio
+	}
 	h.add(c)
 	defer h.remove(c)
 	done := make(chan struct{})
@@ -307,7 +342,7 @@ func (h *hub) serve(conn net.Conn) {
 		var reply []byte
 		switch op {
 		case opText:
-			if c.video {
+			if c.kind != kindRPC {
 				continue
 			}
 			if r := h.dispatch(p); r != nil {
@@ -367,7 +402,7 @@ func (h *hub) watchButton(path string, code uint16) {
 	}
 }
 
-// runMedia starts mediad and hands its frames to the clients of /video.
+// runMedia starts mediad and hands its frames to the clients of /video and /audio.
 func (h *hub) runMedia(path string) {
 	for {
 		cmd := exec.Command(path)
@@ -403,7 +438,11 @@ func (h *hub) readMedia(r io.Reader) error {
 		if _, err := io.ReadFull(r, data); err != nil {
 			return err
 		}
-		h.broadcastVideo(data, hdr[4]&1 != 0)
+		if hdr[4]&flagAudio != 0 {
+			h.broadcastAudio(data)
+		} else {
+			h.broadcastVideo(data, hdr[4]&flagKey != 0)
+		}
 	}
 }
 

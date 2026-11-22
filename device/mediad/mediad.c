@@ -1,5 +1,7 @@
-// mediad: video pipeline of the door station (AR0237/HiSPi -> ISP -> VI -> VPSS -> H.264).
-// Writes frames to stdout as [length u32 LE][flags u8, bit 0 = keyframe][Annex B data].
+// mediad: media pipeline of the door station. Video: AR0237/HiSPi -> ISP -> VI -> VPSS -> H.264.
+// Audio: microphone -> FM2018 echo canceller -> inner codec -> AI, 16 kHz mono.
+// Writes frames to stdout as [length u32 LE][flags u8][data]. Flag bit 0 marks a keyframe,
+// bit 1 an audio frame: 20 ms of 16-bit little-endian PCM. Without bit 1 the data is Annex B H.264.
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
@@ -30,10 +32,19 @@
 #include "mpi_vi.h"
 #include "mpi_vpss.h"
 #include "mpi_venc.h"
+#include "hi_comm_aio.h"
+#include "mpi_ai.h"
+#include "acodec.h"
 
 #define W 1920
 #define H 1080
 #define FPS 30
+#define AUDIO_RATE 16000
+#define AUDIO_POINTS 320 // 20 ms
+#define FLAG_KEY 1
+#define FLAG_AUDIO 2
+// ioctl of the vendor sound driver that switches the speaker amplifier on
+#define DDM_SOUND_AMP_ON 0x401c5308
 
 #define CHK(call)                                                  \
 	do {                                                       \
@@ -249,6 +260,8 @@ static void setup_venc(void)
 	CHK(HI_MPI_SYS_Bind(&src, &dst));
 }
 
+static pthread_mutex_t out_mu = PTHREAD_MUTEX_INITIALIZER;
+
 static void write_all(int fd, const void *buf, size_t n)
 {
 	const char *p = buf;
@@ -260,6 +273,14 @@ static void write_all(int fd, const void *buf, size_t n)
 		p += w;
 		n -= w;
 	}
+}
+
+// write_header starts a frame; the caller holds out_mu until the data is written.
+static void write_header(int out, HI_U32 len, int flags)
+{
+	unsigned char hdr[5] = {len, len >> 8, len >> 16, len >> 24, flags};
+
+	write_all(out, hdr, sizeof(hdr));
 }
 
 static int is_key(const unsigned char *p, HI_U32 n)
@@ -281,7 +302,6 @@ static void stream(int out)
 	for (;;) {
 		VENC_STREAM_S st;
 		VENC_CHN_STAT_S stat;
-		unsigned char hdr[5];
 		HI_U32 i, len = 0;
 		int key = 0;
 
@@ -298,16 +318,83 @@ static void stream(int out)
 			len += packs[i].u32Len - packs[i].u32Offset;
 			key |= is_key(packs[i].pu8Addr + packs[i].u32Offset, packs[i].u32Len - packs[i].u32Offset);
 		}
-		hdr[0] = len;
-		hdr[1] = len >> 8;
-		hdr[2] = len >> 16;
-		hdr[3] = len >> 24;
-		hdr[4] = key;
-		write_all(out, hdr, sizeof(hdr));
+		pthread_mutex_lock(&out_mu);
+		write_header(out, len, key ? FLAG_KEY : 0);
 		for (i = 0; i < st.u32PackCount; i++)
 			write_all(out, packs[i].pu8Addr + packs[i].u32Offset, packs[i].u32Len - packs[i].u32Offset);
+		pthread_mutex_unlock(&out_mu);
 		HI_MPI_VENC_ReleaseStream(0, &st);
 	}
+}
+
+// setup_audio configures the codec like the vendor software: input IN1 (the output of the
+// FM2018), and AI with u32ClkSel 0. With u32ClkSel 1 the microphone delivers only silence.
+// The FM2018 itself is set up by DDM.ko at boot.
+static int setup_audio(void)
+{
+	AIO_ATTR_S a;
+	AI_CHN_PARAM_S p;
+	unsigned int v;
+	int fd = open("/dev/acodec", O_RDWR);
+
+	if (fd < 0) {
+		perror("acodec");
+		return -1;
+	}
+	CHK(ioctl(fd, ACODEC_SOFT_RESET_CTRL));
+	v = ACODEC_FS_16000;
+	CHK(ioctl(fd, ACODEC_SET_I2S1_FS, &v));
+	v = ACODEC_MIXER_IN1;
+	CHK(ioctl(fd, ACODEC_SET_MIXER_MIC, &v));
+	v = 60;
+	CHK(ioctl(fd, ACODEC_SET_INPUT_VOL, &v));
+	close(fd);
+
+	fd = open("/dev/DDM/sound", O_RDWR);
+	if (fd >= 0) {
+		static unsigned int zero[7];
+		if (ioctl(fd, DDM_SOUND_AMP_ON, zero) != 0)
+			perror("amplifier");
+		close(fd);
+	}
+
+	memset(&a, 0, sizeof(a));
+	a.enSamplerate = AUDIO_RATE;
+	a.enBitwidth = AUDIO_BIT_WIDTH_16;
+	a.enWorkmode = AIO_MODE_I2S_MASTER;
+	a.enSoundmode = AUDIO_SOUND_MODE_MONO;
+	a.u32FrmNum = 30;
+	a.u32PtNumPerFrm = AUDIO_POINTS;
+	a.u32ChnCnt = 1;
+	a.u32ClkSel = 0;
+	HI_MPI_AI_DisableChn(0, 0);
+	HI_MPI_AI_Disable(0);
+	CHK(HI_MPI_AI_SetPubAttr(0, &a));
+	CHK(HI_MPI_AI_Enable(0));
+	CHK(HI_MPI_AI_EnableChn(0, 0));
+	memset(&p, 0, sizeof(p));
+	p.u32UsrFrmDepth = 30;
+	CHK(HI_MPI_AI_SetChnParam(0, 0, &p));
+	return 0;
+}
+
+static void *audio_thread(void *arg)
+{
+	int out = *(int *)arg;
+
+	for (;;) {
+		AUDIO_FRAME_S f;
+		AEC_FRAME_S aec;
+
+		if (HI_MPI_AI_GetFrame(0, 0, &f, &aec, 1000) != HI_SUCCESS)
+			continue;
+		pthread_mutex_lock(&out_mu);
+		write_header(out, f.u32Len, FLAG_AUDIO);
+		write_all(out, f.pVirAddr[0], f.u32Len);
+		pthread_mutex_unlock(&out_mu);
+		HI_MPI_AI_ReleaseFrame(0, 0, &f, &aec);
+	}
+	return NULL;
 }
 
 int main(void)
@@ -323,6 +410,13 @@ int main(void)
 	setup_vi();
 	setup_vpss();
 	setup_venc();
+	if (getenv("MEDIAD_NO_AUDIO") == NULL && setup_audio() == 0) {
+		pthread_t t;
+		static int audio_out;
+
+		audio_out = out;
+		CHK(pthread_create(&t, NULL, audio_thread, &audio_out));
+	}
 	stream(out);
 	return 0;
 }

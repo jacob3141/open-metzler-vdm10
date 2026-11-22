@@ -29,7 +29,7 @@
 
     <string name="call_ringing">Es klingelt an der Tür</string>
     <string name="call_answering">Nehme an …</string>
-    <string name="call_answered">Angenommen. Ton gibt es noch nicht.</string>
+    <string name="call_answered">Angenommen. Du hörst die Tür, zurücksprechen geht noch nicht.</string>
     <string name="call_taken">%1$s hat angenommen</string>
     <string name="call_over">Das Klingeln ist vorbei</string>
     <string name="call_connecting">Verbinde mit der Kamera …</string>
@@ -37,7 +37,7 @@
 
     <string name="main_hub">%1$s · Hub %2$s</string>
     <string name="main_live">Tür anzeigen</string>
-    <string name="main_note">Die App funktioniert nur im WLAN zu Hause. Nur Bild, Ton gibt es noch nicht.</string>
+    <string name="main_note">Die App funktioniert nur im WLAN zu Hause. Du siehst und hörst die Tür, zurücksprechen geht noch nicht.</string>
     <string name="retry">Erneut versuchen</string>
     <string name="pair_again">Neu verbinden</string>
     <string name="allow">Erlauben</string>

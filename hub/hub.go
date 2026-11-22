@@ -49,6 +49,7 @@ type Hub struct {
 	cfg   Config
 	store *Store
 	feed  *Feed
+	audio *Feed
 	regs  *Registrations
 
 	mu        sync.Mutex
@@ -60,7 +61,10 @@ type Hub struct {
 }
 
 func NewHub(cfg Config, store *Store) *Hub {
-	return &Hub{cfg: cfg, store: store, feed: NewFeed(cfg.Doorbell), regs: NewRegistrations(), sessions: map[*Session]struct{}{}}
+	return &Hub{
+		cfg: cfg, store: store, regs: NewRegistrations(), sessions: map[*Session]struct{}{},
+		feed: NewFeed(cfg.Doorbell), audio: NewAudioFeed(cfg.Doorbell),
+	}
 }
 
 func notification(method string, params any) []byte {
@@ -132,19 +136,28 @@ func (h *Hub) record(t time.Time) {
 	defer cancel()
 	sub := h.feed.Subscribe()
 	defer h.feed.Unsubscribe(sub)
+	asub := h.audio.Subscribe()
+	defer h.audio.Unsubscribe(asub)
 
+	// The recording starts with the first keyframe; audio from before is dropped.
 	var frames []Frame
+	var audio []byte
 	var start time.Time
 	for {
 		select {
 		case f := <-sub.C:
 			if start.IsZero() {
-				start = time.Now()
+				start = f.At
 			}
 			frames = append(frames, f)
 			if time.Since(start) < h.cfg.RecordFor {
 				continue
 			}
+		case a := <-asub.C:
+			if !start.IsZero() && !a.At.Before(start) {
+				audio = append(audio, a.Data...)
+			}
+			continue
 		case <-ctx.Done():
 		}
 		break
@@ -153,7 +166,7 @@ func (h *Hub) record(t time.Time) {
 		log.Print("recording: no frames from the doorbell")
 		return
 	}
-	data, err := WriteMP4(frames, time.Since(start).Seconds())
+	data, err := WriteMP4(frames, audio, time.Since(start).Seconds())
 	if err != nil {
 		log.Printf("recording: %v", err)
 		return
@@ -164,7 +177,7 @@ func (h *Hub) record(t time.Time) {
 		return
 	}
 	h.store.Prune(h.cfg.MaxMessages)
-	log.Printf("visitor message %s: %d frames, %d bytes", id, len(frames), len(data))
+	log.Printf("visitor message %s: %d frames, %.1f s audio, %d bytes", id, len(frames), float64(len(audio))/2/audioRate, len(data))
 	h.mu.Lock()
 	h.broadcast(notification("message.new", map[string]any{"id": id, "time": t.Unix()}), nil)
 	h.mu.Unlock()

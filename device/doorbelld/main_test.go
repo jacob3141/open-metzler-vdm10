@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 )
@@ -82,7 +84,7 @@ func TestDispatch(t *testing.T) {
 
 func TestVideoWaitsForKeyframeAndRecovers(t *testing.T) {
 	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
-	c := &client{out: make(chan []byte, 1), video: true, needKey: true}
+	c := &client{out: make(chan []byte, 1), kind: kindVideo, needKey: true}
 	h.add(c)
 	h.broadcastVideo([]byte{1}, false)
 	if len(c.out) != 0 {
@@ -109,12 +111,41 @@ func TestVideoWaitsForKeyframeAndRecovers(t *testing.T) {
 
 func TestRPCBroadcastSkipsVideoClients(t *testing.T) {
 	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
-	v := &client{out: make(chan []byte, 1), video: true}
+	v := &client{out: make(chan []byte, 1), kind: kindVideo}
 	r := &client{out: make(chan []byte, 1)}
 	h.add(v)
 	h.add(r)
 	h.broadcast([]byte(`{}`))
 	if len(v.out) != 0 || len(r.out) != 1 {
 		t.Fatalf("video=%d rpc=%d", len(v.out), len(r.out))
+	}
+}
+
+func TestMediaFramesGoToTheirClients(t *testing.T) {
+	h := &hub{clients: map[*client]struct{}{}, started: time.Now()}
+	v := &client{out: make(chan []byte, 4), kind: kindVideo, needKey: true}
+	a := &client{out: make(chan []byte, 4), kind: kindAudio}
+	r := &client{out: make(chan []byte, 4)}
+	h.add(v)
+	h.add(a)
+	h.add(r)
+	var in []byte
+	frame := func(flags byte, data string) {
+		in = binary.LittleEndian.AppendUint32(in, uint32(len(data)))
+		in = append(in, flags)
+		in = append(in, data...)
+	}
+	frame(flagKey, "key")
+	frame(flagAudio, "pcm1")
+	frame(0, "p")
+	frame(flagAudio, "pcm2")
+	if err := h.readMedia(bytes.NewReader(in)); err != io.EOF {
+		t.Fatalf("readMedia: %v", err)
+	}
+	if len(v.out) != 2 || len(a.out) != 2 || len(r.out) != 0 {
+		t.Fatalf("video=%d audio=%d rpc=%d", len(v.out), len(a.out), len(r.out))
+	}
+	if got := <-a.out; !bytes.Equal(got, makeFrame(opBinary, []byte("pcm1"))) {
+		t.Fatalf("audio frame %q", got)
 	}
 }

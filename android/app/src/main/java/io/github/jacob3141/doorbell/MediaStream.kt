@@ -8,12 +8,14 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 
 /**
- * Receives the door camera from /api/video (one binary message per H.264 frame) and passes the
- * frames on. Reconnects by itself until [stop].
+ * Receives a stream of the door station from the hub, one binary message per frame, and passes
+ * the frames on: /api/video sends H.264 frames, /api/audio 20 ms of PCM each. Reconnects by
+ * itself until [stop].
  */
-class VideoStream(
+class MediaStream(
     private val hub: String,
     private val token: String,
+    private val path: String,
     private val onFrame: (ByteArray) -> Unit,
     private val onProblem: (HubException.Reason?) -> Unit, // null: connected again
 ) {
@@ -32,7 +34,7 @@ class VideoStream(
         }
         val g = ++gen
         socket = client.newWebSocket(
-            HubApi.authed(HubAddress.ws(hub, "/api/video"), token).build(),
+            HubApi.authed(HubAddress.ws(hub, path), token).build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     main.post { if (g == gen) onProblem(null) }

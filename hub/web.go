@@ -53,7 +53,8 @@ func (h *Hub) Routes() http.Handler {
 	mux.HandleFunc("GET /api/register/{id}", h.registerStatus)
 
 	mux.HandleFunc("GET /api/events", h.api(h.events))
-	mux.HandleFunc("GET /api/video", h.api(h.video))
+	mux.HandleFunc("GET /api/video", h.api(h.stream(h.feed)))
+	mux.HandleFunc("GET /api/audio", h.api(h.stream(h.audio)))
 	mux.HandleFunc("GET /api/messages", h.api(h.listMessages))
 	mux.HandleFunc("GET /api/messages/{id}", h.api(h.apiMessage))
 	mux.HandleFunc("DELETE /api/client", h.api(h.deleteSelf))
@@ -267,7 +268,7 @@ func (h *Hub) handleRPC(s *Session, p []byte) []byte {
 		return rpcReply(req.ID, "pong", 0, "")
 	case "ring.accept":
 		if h.Accept(s, req.Params.ID) {
-			return rpcReply(req.ID, map[string]any{"video": "/api/video"}, 0, "")
+			return rpcReply(req.ID, map[string]any{"video": "/api/video", "audio": "/api/audio"}, 0, "")
 		}
 		return rpcReply(req.ID, nil, -32000, "Ring is no longer active")
 	case "ring.reject":
@@ -290,16 +291,22 @@ func rpcReply(id json.RawMessage, result any, code int, msg string) []byte {
 	return b
 }
 
-// video streams frames to a client app; the doorbell connection exists only while needed.
-func (h *Hub) video(w http.ResponseWriter, r *http.Request, _ Client) {
-	conn, err := ws.Upgrade(w, r, 4096)
-	if err != nil {
-		return
+// stream sends the frames of a feed to a client app, one WebSocket message each; the
+// doorbell connection exists only while needed.
+func (h *Hub) stream(feed *Feed) func(http.ResponseWriter, *http.Request, Client) {
+	return func(w http.ResponseWriter, r *http.Request, _ Client) {
+		conn, err := ws.Upgrade(w, r, 4096)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		sub := feed.Subscribe()
+		defer feed.Unsubscribe(sub)
+		streamFrames(conn, sub)
 	}
-	defer conn.Close()
-	sub := h.feed.Subscribe()
-	defer h.feed.Unsubscribe(sub)
+}
 
+func streamFrames(conn *ws.Conn, sub *Sub) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

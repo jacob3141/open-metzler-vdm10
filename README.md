@@ -8,18 +8,18 @@ Local software for the Metzler VDM10-VM-POE video door station. It needs no clou
 
 | Path | Purpose |
 |---|---|
-| `device/doorbelld` | WebSocket server on the door station: JSON-RPC, button events, video |
-| `device/mediad` | H.264 video pipeline on the door station |
+| `device/doorbelld` | WebSocket server on the door station: JSON-RPC, button events, video, sound |
+| `device/mediad` | Media pipeline on the door station: H.264 video and the microphone |
 | `hub` | Docker service: live view, client registration, ring handling, visitor messages |
-| `android` | Android app: rings with the door camera, live view, visitor messages (home Wi-Fi only) |
+| `android` | Android app: rings with the door camera and its sound, live view, visitor messages (home Wi-Fi only) |
 | `hub/cmd/stubclient` | Command-line client for tests |
-| `hub/cmd/fakedoorbell` | Stand-in for `doorbelld` during development: rings on `POST /ring`, relays the video of a real door station |
+| `hub/cmd/fakedoorbell` | Stand-in for `doorbelld` during development: rings on `POST /ring`, relays video and sound of a real door station |
 | `viewer` | Debug page that shows the video straight from the door station (needs HTTPS or localhost) |
 | `tools` | Small test clients |
 
 ## Status
 
-Video and the button event work. Microphone and speaker work on the device (see `device/mediad/atest.c`), but audio is not yet part of `mediad`, so visitor messages are still silent.
+Video, the microphone and the button event work: the app shows and plays the door, visitor messages have sound. The speaker works on the device (see `device/mediad/atest.c`), but nothing uses it yet, so you cannot talk back.
 
 `doorbelld` has no authentication, so keep the door station on a trusted network. The client API requires per-client tokens. The admin interface is protected by `HUB_ADMIN_PASSWORD`; if it is empty, anyone on the network can open it.
 
@@ -54,8 +54,9 @@ Then send `Authorization: Bearer <token>` with every request.
 |---|---|
 | `ws /api/events` | JSON-RPC 2.0. The hub pings every 20 s and drops a client that has not answered for 60 s |
 | `ws /api/video` | One binary message per frame, H.264 Annex B, starting at the next keyframe |
+| `ws /api/audio` | One binary message per 20 ms of sound: 16 kHz mono 16-bit little-endian PCM |
 | `GET /api/messages` | List visitor messages as JSON |
-| `GET /api/messages/{id}` | Download a visitor message as MP4 |
+| `GET /api/messages/{id}` | Download a visitor message as MP4: H.264 and, if the door station sends sound, PCM (`sowt`) |
 | `DELETE /api/client` | Remove this client from the hub (when the user unpairs the app) |
 
 The hub sends the notifications `ring {id, time}`, `ring.taken {id, by}`, `ring.missed {id}` and `message.new {id, time}`. Clients call `ring.accept {id}`, `ring.reject {id}` and `system.ping`.
@@ -394,8 +395,8 @@ Treat physical access as equivalent to root access.
 
 ## Known limitations
 
-- **Audio not in the stream yet.** Microphone and speaker work, but `mediad` does not
-  capture or play audio yet.  What is known about the audio path:
+- **No talking back.** `mediad` records the microphone, but nothing plays sound on the
+  speaker yet.  What is known about the audio path:
   - The FM2018 echo canceller (I2C) is set up by `DDM.ko` at boot with the register
     list for board DS17040.  `echo p > /proc/OSAL/fm2018_0` prints its registers to
     `dmesg`, `r <reg>` and `w <reg> <val>` read and write single ones.

@@ -1,6 +1,6 @@
 // fakedoorbell stands in for doorbelld while developing the hub and the app. It speaks the
-// JSON-RPC of the door station on /, relays the video of a real door station on /video, and
-// presses the button when it gets POST /ring.
+// JSON-RPC of the door station on /, relays video and sound of a real door station on /video
+// and /audio, and presses the button when it gets POST /ring.
 //
 //	fakedoorbell -listen :8090 -video doorbell.home.arpa:8080
 //	curl -X POST localhost:8090/ring
@@ -18,7 +18,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", ":8090", "address to listen on")
-	video := flag.String("video", "", "real door station whose /video is relayed (host:port)")
+	video := flag.String("video", "", "real door station whose /video and /audio are relayed (host:port)")
 	flag.Parse()
 
 	var mu sync.Mutex
@@ -36,7 +36,7 @@ func main() {
 		log.Printf("button pressed, told %d connections", n)
 		w.Write([]byte("ok\n"))
 	})
-	http.HandleFunc("GET /video", func(w http.ResponseWriter, r *http.Request) {
+	relay := func(w http.ResponseWriter, r *http.Request) {
 		if *video == "" {
 			http.Error(w, "start with -video to relay a real door station", http.StatusNotFound)
 			return
@@ -46,9 +46,9 @@ func main() {
 			return
 		}
 		defer c.Close()
-		src, err := ws.Dial(*video, "/video", "", 4<<20, 10*time.Second)
+		src, err := ws.Dial(*video, r.URL.Path, "", 4<<20, 10*time.Second)
 		if err != nil {
-			log.Printf("video: %v", err)
+			log.Printf("%s: %v", r.URL.Path, err)
 			return
 		}
 		defer src.Close()
@@ -60,15 +60,17 @@ func main() {
 				}
 			}
 		}()
-		log.Print("video: relaying")
+		log.Printf("%s: relaying", r.URL.Path)
 		for {
 			op, p, err := src.Read()
 			if err != nil || c.Write(op, p) != nil {
-				log.Print("video: done")
+				log.Printf("%s: done", r.URL.Path)
 				return
 			}
 		}
-	})
+	}
+	http.HandleFunc("GET /video", relay)
+	http.HandleFunc("GET /audio", relay)
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		c, err := ws.Upgrade(w, r, 1<<20)
 		if err != nil {

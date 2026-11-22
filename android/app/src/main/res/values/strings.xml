@@ -29,7 +29,7 @@
 
     <string name="call_ringing">Someone is at the door</string>
     <string name="call_answering">Answering …</string>
-    <string name="call_answered">Answered. There is no sound yet.</string>
+    <string name="call_answered">Answered. You hear the door; talking back is not possible yet.</string>
     <string name="call_taken">%1$s answered</string>
     <string name="call_over">The ring is over</string>
     <string name="call_connecting">Connecting to the camera …</string>
@@ -37,7 +37,7 @@
 
     <string name="main_hub">%1$s · hub %2$s</string>
     <string name="main_live">Show the door</string>
-    <string name="main_note">The app only works in the home Wi-Fi. Video only, there is no sound yet.</string>
+    <string name="main_note">The app only works in the home Wi-Fi. You see and hear the door, talking back is not possible yet.</string>
     <string name="retry">Try again</string>
     <string name="pair_again">Pair again</string>
     <string name="allow">Allow</string>

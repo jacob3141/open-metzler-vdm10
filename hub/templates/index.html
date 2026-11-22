@@ -103,7 +103,7 @@
 
   <section>
     <h2>Visitor messages</h2>
-    <p class="muted">If nobody answers within {{.Timeout}} seconds, the hub records {{.RecordFor}} seconds of video. There is no audio yet.</p>
+    <p class="muted">If nobody answers within {{.Timeout}} seconds, the hub records {{.RecordFor}} seconds of video and sound.</p>
     {{range .Messages}}
     <div class="row">
       <div>{{when .Time}} <span class="muted">{{mb .Size}}</span></div>

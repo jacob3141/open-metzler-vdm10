@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,10 @@ func newHub(t *testing.T, doorbell string) *Hub {
 	return NewHub(Config{Doorbell: doorbell, AdminPassword: "pw", RingTimeout: 150 * time.Millisecond, RecordFor: 200 * time.Millisecond, MaxMessages: 2}, s)
 }
 
-// fakeDoorbell serves frames on /video and accepts /.
+// pcmFrame is 20 ms of audio as the doorbell sends it.
+var pcmFrame = bytes.Repeat([]byte{0x10, 0x20}, audioChunkFrames)
+
+// fakeDoorbell serves frames on /video and /audio and accepts /.
 func fakeDoorbell(t *testing.T) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +40,12 @@ func fakeDoorbell(t *testing.T) string {
 			return
 		}
 		defer c.Close()
+		if r.URL.Path == "/audio" {
+			for c.Write(ws.Binary, pcmFrame) == nil {
+				time.Sleep(10 * time.Millisecond)
+			}
+			return
+		}
 		if r.URL.Path != "/video" {
 			c.Read()
 			return
@@ -182,6 +192,63 @@ func TestUnansweredRingRecordsMessage(t *testing.T) {
 	if m[0].Size == 0 {
 		t.Fatal("empty file")
 	}
+	d, err := os.ReadFile(h.store.messagePath(m[0].ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(d, []byte("sowt")) || !bytes.Contains(d, pcmFrame) {
+		t.Fatal("recording has no audio")
+	}
+}
+
+func TestMP4WithAudio(t *testing.T) {
+	// 2.5 frames of audio: the half frame is dropped, chunks stay whole
+	audio := bytes.Repeat(pcmFrame, 3)[:len(pcmFrame)*5/2]
+	d, err := WriteMP4([]Frame{{Data: []byte(key), Key: true}, {Data: []byte(delta)}}, audio, 0.1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, bodies := boxes(t, d)
+	if strings.Join(names, ",") != "ftyp,moov,mdat" {
+		t.Fatal(names)
+	}
+	moov, mdat := bodies[1], bodies[2]
+	for _, b := range []string{"avc1", "soun", "sowt", "smhd"} {
+		if !bytes.Contains(moov, []byte(b)) {
+			t.Fatal(b)
+		}
+	}
+	if !bytes.HasSuffix(mdat, bytes.Repeat(pcmFrame, 2)) || bytes.HasSuffix(mdat, bytes.Repeat(pcmFrame, 3)) {
+		t.Fatal("audio data must hold two whole frames")
+	}
+	// the chunk offsets of the audio track point at the audio in the file
+	i := bytes.LastIndex(moov, []byte("stco"))
+	n := binary.BigEndian.Uint32(moov[i+8:])
+	if n != 2 {
+		t.Fatalf("%d audio chunks", n)
+	}
+	first := binary.BigEndian.Uint32(moov[i+12:])
+	if !bytes.Equal(d[first:first+uint32(len(pcmFrame))], pcmFrame) {
+		t.Fatal("audio chunk offset is wrong")
+	}
+	if second := binary.BigEndian.Uint32(moov[i+16:]); second != first+uint32(len(pcmFrame)) {
+		t.Fatal("second chunk offset is wrong")
+	}
+}
+
+func TestAPIAudioStreamsPCM(t *testing.T) {
+	h := newHub(t, fakeDoorbell(t))
+	addr := serve(t, h)
+	_, tok, _ := h.store.AddClient("one")
+	c, err := ws.Dial(addr, "/api/audio", "Authorization: Bearer "+tok+"\r\n", 1<<20, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	op, p, err := c.Read()
+	if err != nil || op != ws.Binary || !bytes.Equal(p, pcmFrame) {
+		t.Fatalf("op=%d len=%d err=%v", op, len(p), err)
+	}
 }
 
 func TestRecordsWhenAllRejectOrNobodyConnected(t *testing.T) {
@@ -312,7 +379,7 @@ func TestMessageIDRejectsTraversal(t *testing.T) {
 }
 
 func TestMP4Structure(t *testing.T) {
-	d, err := WriteMP4([]Frame{{Data: []byte(key), Key: true}, {Data: []byte(delta)}}, 0.1)
+	d, err := WriteMP4([]Frame{{Data: []byte(key), Key: true}, {Data: []byte(delta)}}, nil, 0.1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +391,7 @@ func TestMP4Structure(t *testing.T) {
 	if strings.Index(string(d), "moov") > strings.Index(string(d), "mdat") {
 		t.Fatal("index must precede the data")
 	}
-	if _, err := WriteMP4([]Frame{{Data: []byte(delta)}}, 1); err == nil {
+	if _, err := WriteMP4([]Frame{{Data: []byte(delta)}}, nil, 1); err == nil {
 		t.Fatal("recording without a keyframe accepted")
 	}
 }
